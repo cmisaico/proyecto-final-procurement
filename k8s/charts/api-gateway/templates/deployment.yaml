@@ -1,0 +1,200 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "api-gateway.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "api-gateway.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "api-gateway.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "api-gateway.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        # Force pod restart when configmap content changes
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "api-gateway.serviceAccountName" . }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api-gateway
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            # ---- PostgreSQL (non-secret) ------------------------------------
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: POSTGRES_HOST
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: POSTGRES_PORT
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: POSTGRES_USER
+            # ---- PostgreSQL (secret) ----------------------------------------
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "api-gateway.secretName" . }}
+                  key: POSTGRES_PASSWORD
+            # ---- vLLM inference --------------------------------------------
+            - name: VLLM_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: VLLM_BASE_URL
+            - name: VLLM_MODEL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: VLLM_MODEL
+            # ---- Embeddings service ----------------------------------------
+            - name: EMBEDDINGS_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: EMBEDDINGS_BASE_URL
+            # ---- Qdrant ----------------------------------------------------
+            - name: QDRANT_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: QDRANT_HOST
+            - name: QDRANT_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: QDRANT_PORT
+            # ---- MinIO (non-secret) ----------------------------------------
+            - name: MINIO_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: MINIO_ENDPOINT
+            - name: MINIO_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: MINIO_BUCKET
+            # ---- MinIO (secret) --------------------------------------------
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "api-gateway.secretName" . }}
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "api-gateway.secretName" . }}
+                  key: MINIO_SECRET_KEY
+            # ---- Storage backend (minio | azure) ---------------------------
+            - name: STORAGE_BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: STORAGE_BACKEND
+            - name: AZURE_STORAGE_ACCOUNT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: AZURE_STORAGE_ACCOUNT
+            - name: AZURE_STORAGE_CONTAINER
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: AZURE_STORAGE_CONTAINER
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: procurement-storage-secret
+                  key: connection-string
+                  optional: true
+            # ---- RAG / retrieval tuning ------------------------------------
+            - name: CONTEXT_TOP_K
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: CONTEXT_TOP_K
+            - name: MAX_CONTEXT_TOKENS
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: MAX_CONTEXT_TOKENS
+            - name: GUARDRAIL_THRESHOLD
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: GUARDRAIL_THRESHOLD
+            # ---- OpenTelemetry ---------------------------------------------
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: OTEL_EXPORTER_OTLP_ENDPOINT
+            - name: OTEL_SERVICE_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "api-gateway.configmapName" . }}
+                  key: OTEL_SERVICE_NAME
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

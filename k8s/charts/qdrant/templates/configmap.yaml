@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "qdrant.configMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+data:
+  # production.yaml is merged on top of Qdrant's default config.
+  # Environment variables (QDRANT__*) set in the StatefulSet take precedence
+  # over values here, so this file is kept for reference / non-secret settings.
+  production.yaml: |
+    log_level: {{ .Values.config.log_level }}
+    service:
+      host: "0.0.0.0"
+      http_port: {{ .Values.service.port }}
+      grpc_port: {{ .Values.service.grpcPort }}
+      enable_cors: true
+    storage:
+      storage_path: /qdrant/storage
+      snapshots_path: /qdrant/snapshots
+    cluster:
+      enabled: false
+
+  # Name of the default collection the application expects to exist.
+  # The application (or a post-install Job) should create this collection via
+  # the Qdrant REST API before ingesting embeddings.
+  collection_name: {{ .Values.collection | quote }}

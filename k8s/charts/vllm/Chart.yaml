@@ -1,0 +1,24 @@
+apiVersion: v2
+name: vllm
+description: vLLM GPU inference server — Qwen2.5-7B-Instruct-AWQ (dev/T4 Spot)
+type: application
+version: 0.2.0
+appVersion: "0.8.5"
+annotations:
+  model: Qwen/Qwen2.5-7B-Instruct-AWQ
+  quantization: awq
+  gpu: nvidia-t4
+  environment: dev
+keywords:
+  - vllm
+  - llm
+  - inference
+  - gpu
+  - ai
+  - awq
+home: https://github.com/vllm-project/vllm
+sources:
+  - https://github.com/vllm-project/vllm
+maintainers:
+  - name: ai-platform-team
+    email: tech@healoi.com

@@ -1,0 +1,32 @@
+subscription_id = "00000000-0000-0000-0000-000000000000"
+tenant_id       = "00000000-0000-0000-0000-000000000000"
+location        = "brazilsouth"
+project         = "procurement"
+environment     = "dev"
+
+# Dev: false → ACR Basic, sin DNS zones privadas, terraform destroy sin bloqueos.
+# Prod: true  → ACR Premium, private endpoints en todos los recursos.
+enable_private_endpoints = false
+
+resource_group_name            = "rg-procurement-dev"
+resource_group_monitoring_name = "rg-procurement-monitoring"
+vnet_name                      = "vnet-procurement-dev"
+aks_subnet_id                  = "/subscriptions/.../subnets/snet-aks-nodes"
+pe_subnet_id                   = "/subscriptions/.../subnets/snet-private-endpoints"
+
+acr_name              = ""acrprocurementazdev"
+keyvault_name         = "kv-procurement-dev"
+postgres_server_name  = "psql-procurement-az-dev"
+postgres_admin_username = "procureadmin"
+postgres_admin_password = "CHANGE_ME_SECURE_PASSWORD"
+postgres_db_name      = "procurement_db"
+storage_account_name  = "stprocurementazdev"
+law_name              = "law-procurement-dev"
+grafana_name          = "graf-procurement-dev"
+
+tags = {
+  environment = "dev"
+  project     = "procurement"
+  managed_by  = "terraform"
+  owner       = "platform-team"
+}

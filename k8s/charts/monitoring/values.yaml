@@ -1,0 +1,259 @@
+# ============================================================
+# Monitoring Stack — values.yaml
+# Wraps kube-prometheus-stack + loki-stack for the
+# AI Procurement Platform (ai-platform namespace)
+# ============================================================
+
+# ------------------------------------
+# kube-prometheus-stack sub-chart
+# ------------------------------------
+kube-prometheus-stack:
+  fullnameOverride: prometheus
+
+  # ---- Prometheus ----
+  prometheus:
+    enabled: true
+    prometheusSpec:
+      retention: 15d
+      retentionSize: ""
+      # Scrape all ServiceMonitors across all namespaces
+      serviceMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorSelector: {}
+      serviceMonitorNamespaceSelector: {}
+      # Scrape all PodMonitors across all namespaces
+      podMonitorSelectorNilUsesHelmValues: false
+      podMonitorSelector: {}
+      podMonitorNamespaceSelector: {}
+      # Scrape all PrometheusRules across all namespaces
+      ruleSelectorNilUsesHelmValues: false
+      ruleSelector: {}
+      ruleNamespaceSelector: {}
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: local-path
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 20Gi
+      resources:
+        requests:
+          cpu: 200m
+          memory: 512Mi
+        limits:
+          cpu: 1000m
+          memory: 2Gi
+
+  # ---- Grafana ----
+  grafana:
+    enabled: true
+    adminPassword: procurement123
+    persistence:
+      enabled: true
+      storageClassName: local-path
+      accessModes:
+        - ReadWriteOnce
+      size: 5Gi
+    grafana.ini:
+      server:
+        root_url: "%(protocol)s://%(domain)s:%(http_port)s/"
+        serve_from_sub_path: false
+      auth.anonymous:
+        enabled: false
+    datasources:
+      datasources.yaml:
+        apiVersion: 1
+        datasources:
+          - name: Prometheus
+            type: prometheus
+            url: http://prometheus-kube-prometheus-prometheus:9090
+            access: proxy
+            isDefault: false
+          - name: Loki
+            type: loki
+            url: http://loki:3100
+            access: proxy
+    dashboardProviders:
+      dashboardproviders.yaml:
+        apiVersion: 1
+        providers:
+          - name: procurement
+            orgId: 1
+            folder: "AI Procurement Platform"
+            type: file
+            disableDeletion: false
+            editable: true
+            options:
+              path: /var/lib/grafana/dashboards/procurement
+    dashboards:
+      procurement: {}
+    sidecar:
+      dashboards:
+        enabled: true
+        searchNamespace: ALL
+        label: grafana_dashboard
+      datasources:
+        enabled: true
+        searchNamespace: ALL
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  # ---- Alertmanager ----
+  alertmanager:
+    enabled: false
+
+  # ---- Node Exporter ----
+  # Disabled on WSL2: "/" is not a shared mount, so node-exporter fails to start
+  nodeExporter:
+    enabled: false
+
+  # ---- Kube State Metrics ----
+  kubeStateMetrics:
+    enabled: true
+
+  # ---- Default scrape configs ----
+  defaultRules:
+    create: true
+    rules:
+      alertmanager: false
+      etcd: true
+      configReloaders: true
+      general: true
+      k8s: true
+      kubeApiserverAvailability: true
+      kubeApiserverBurnrate: true
+      kubeApiserverHistogram: true
+      kubeApiserverSlos: true
+      kubeControllerManager: true
+      kubelet: true
+      kubeProxy: true
+      kubePrometheusGeneral: true
+      kubePrometheusNodeRecording: true
+      kubernetesApps: true
+      kubernetesResources: true
+      kubernetesStorage: true
+      kubernetesSystem: true
+      kubeSchedulerAlerting: true
+      kubeSchedulerRecording: true
+      kubeStateMetrics: true
+      network: true
+      node: true
+      nodeExporterAlerting: true
+      nodeExporterRecording: true
+      prometheus: true
+      prometheusOperator: true
+
+  # ---- Additional ServiceMonitors for ai-platform namespace ----
+  additionalServiceMonitors:
+    - name: ai-platform-api-gateway
+      namespace: monitoring
+      selector:
+        matchLabels:
+          app: api-gateway
+      namespaceSelector:
+        matchNames:
+          - ai-platform
+      endpoints:
+        - port: metrics
+          path: /api/v1/metrics
+          interval: 10s
+          scrapeTimeout: 8s
+    - name: ai-platform-vllm
+      namespace: monitoring
+      selector:
+        matchLabels:
+          app: vllm
+      namespaceSelector:
+        matchNames:
+          - ai-platform
+      endpoints:
+        - port: metrics
+          path: /metrics
+          interval: 10s
+          scrapeTimeout: 8s
+
+# ------------------------------------
+# loki-stack sub-chart
+# ------------------------------------
+loki-stack:
+  loki:
+    enabled: true
+    persistence:
+      enabled: true
+      storageClassName: local-path
+      size: 10Gi
+    config:
+      schema_config:
+        configs:
+          - from: "2023-01-01"
+            store: boltdb-shipper
+            object_store: filesystem
+            schema: v11
+            index:
+              prefix: index_
+              period: 24h
+      storage_config:
+        boltdb_shipper:
+          active_index_directory: /data/loki/boltdb-shipper-active
+          cache_location: /data/loki/boltdb-shipper-cache
+          cache_ttl: 24h
+          shared_store: filesystem
+        filesystem:
+          directory: /data/loki/chunks
+      limits_config:
+        enforce_metric_name: false
+        reject_old_samples: true
+        reject_old_samples_max_age: 168h
+        ingestion_rate_mb: 16
+        ingestion_burst_size_mb: 32
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+  promtail:
+    enabled: true
+    config:
+      clients:
+        - url: http://loki:3100/loki/api/v1/push
+      snippets:
+        extraScrapeConfigs: |
+          - job_name: ai-platform
+            kubernetes_sd_configs:
+              - role: pod
+                namespaces:
+                  names:
+                    - ai-platform
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_pod_label_app]
+                target_label: app
+              - source_labels: [__meta_kubernetes_namespace]
+                target_label: namespace
+              - source_labels: [__meta_kubernetes_pod_name]
+                target_label: pod
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+
+# ------------------------------------
+# Top-level feature flags (used by
+# Chart.yaml dependency conditions)
+# ------------------------------------
+prometheus:
+  enabled: true
+
+loki:
+  enabled: true

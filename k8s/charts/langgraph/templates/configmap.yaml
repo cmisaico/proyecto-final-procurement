@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "langgraph.configmapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "langgraph.labels" . | nindent 4 }}
+data:
+  # ---- PostgreSQL (non-secret) -----------------------------------------------
+  POSTGRES_HOST: {{ .Values.config.POSTGRES_HOST | quote }}
+  POSTGRES_PORT: {{ .Values.config.POSTGRES_PORT | quote }}
+  POSTGRES_DB: {{ .Values.config.POSTGRES_DB | quote }}
+  POSTGRES_USER: {{ .Values.config.POSTGRES_USER | quote }}
+
+  # ---- vLLM inference --------------------------------------------------------
+  VLLM_BASE_URL: {{ .Values.config.VLLM_BASE_URL | quote }}
+  VLLM_MODEL: {{ .Values.config.VLLM_MODEL | quote }}
+
+  # ---- Embeddings service ----------------------------------------------------
+  EMBEDDINGS_BASE_URL: {{ .Values.config.EMBEDDINGS_BASE_URL | quote }}
+
+  # ---- Qdrant vector store ---------------------------------------------------
+  QDRANT_HOST: {{ .Values.config.QDRANT_HOST | quote }}
+  QDRANT_PORT: {{ .Values.config.QDRANT_PORT | quote }}
+
+  # ---- MinIO object storage (non-secret) ------------------------------------
+  MINIO_ENDPOINT: {{ .Values.config.MINIO_ENDPOINT | quote }}
+  MINIO_BUCKET: {{ .Values.config.MINIO_BUCKET | quote }}
+
+  # ---- Storage backend selection ---------------------------------------------
+  STORAGE_BACKEND: {{ .Values.config.STORAGE_BACKEND | quote }}
+  AZURE_STORAGE_ACCOUNT: {{ .Values.config.AZURE_STORAGE_ACCOUNT | quote }}
+  AZURE_STORAGE_CONTAINER: {{ .Values.config.AZURE_STORAGE_CONTAINER | quote }}
+
+  # ---- RAG / retrieval tuning ------------------------------------------------
+  CONTEXT_TOP_K: {{ .Values.config.CONTEXT_TOP_K | quote }}
+  MAX_CONTEXT_TOKENS: {{ .Values.config.MAX_CONTEXT_TOKENS | quote }}
+  GUARDRAIL_THRESHOLD: {{ .Values.config.GUARDRAIL_THRESHOLD | quote }}
+
+  # ---- OpenTelemetry ---------------------------------------------------------
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.config.OTEL_EXPORTER_OTLP_ENDPOINT | quote }}
+  OTEL_SERVICE_NAME: {{ .Values.config.OTEL_SERVICE_NAME | quote }}
+
+  # ---- Worker-specific -------------------------------------------------------
+  WORKER_POLL_INTERVAL: {{ .Values.config.WORKER_POLL_INTERVAL | quote }}

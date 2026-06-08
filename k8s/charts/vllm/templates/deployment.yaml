@@ -1,0 +1,134 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vllm.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "vllm.labels" . | nindent 4 }}
+spec:
+  # vLLM does not support multi-replica scaling when limited to 1 GPU per pod
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "vllm.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "vllm.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "vllm.serviceAccountName" . }}
+      runtimeClassName: nvidia
+      enableServiceLinks: false
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      nodeSelector:
+        {{- toYaml .Values.nodeSelector | nindent 8 }}
+
+      # Tolerate GPU-dedicated node taints
+      tolerations:
+        {{- toYaml .Values.tolerations | nindent 8 }}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      # Allow extra time for large model weights to be loaded from cache/hub
+      terminationGracePeriodSeconds: 60
+
+      containers:
+        - name: vllm
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          # vLLM OpenAI-compatible server entrypoint arguments
+          args:
+            - "--model"
+            - {{ .Values.model.name | quote }}
+            - "--gpu-memory-utilization"
+            - {{ .Values.model.gpuMemoryUtilization | quote }}
+            - "--max-model-len"
+            - {{ .Values.model.maxModelLen | quote }}
+            - "--max-num-batched-tokens"
+            - {{ .Values.model.maxNumBatchedTokens | quote }}
+            - "--dtype"
+            - {{ .Values.model.dtype | quote }}
+            {{- if .Values.model.quantization }}
+            - "--quantization"
+            - {{ .Values.model.quantization | quote }}
+            {{- end }}
+            - "--served-model-name"
+            - {{ .Values.model.servedModelName | quote }}
+            - "--port"
+            - "8000"
+            {{- if .Values.model.trustRemoteCode }}
+            - "--trust-remote-code"
+            {{- end }}
+
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+
+          # Environment variables (HF token + optional extras from values)
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+
+          # Resource requests and limits — GPU must be specified both in
+          # requests and limits for the NVIDIA device plugin to work correctly
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          # Readiness: model is not ready until /health returns 200.
+          # Large models (7B+) can take 5+ minutes to load.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+
+          # Liveness: restart if the server becomes unresponsive after load.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+
+          volumeMounts:
+            {{- if .Values.persistence.enabled }}
+            - name: model-cache
+              mountPath: {{ .Values.persistence.mountPath }}
+            {{- end }}
+
+      volumes:
+        {{- if .Values.persistence.enabled }}
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: {{ include "vllm.fullname" . }}-model-cache
+        {{- end }}

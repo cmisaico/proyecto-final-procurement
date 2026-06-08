@@ -1,0 +1,32 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-platform
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    environment: production
+    team: ai-platform
+    purpose: inference-and-rag
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: monitoring
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    environment: production
+    team: platform
+    purpose: observability
+
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    environment: production
+    team: platform
+    purpose: ingress-control

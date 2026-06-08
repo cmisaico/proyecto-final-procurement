@@ -1,0 +1,11 @@
+image:
+  repository: acrprocurementazdev.azurecr.io/procurement-embeddings
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+nodeSelector:
+  nodepool: user
+
+tolerations: []
+
+affinity: {}

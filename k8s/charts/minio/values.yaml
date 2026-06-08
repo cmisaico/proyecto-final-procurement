@@ -1,0 +1,53 @@
+image:
+  repository: minio/minio
+  tag: "RELEASE.2024-11-07T00-52-20Z"
+  pullPolicy: IfNotPresent
+
+rootUser: minioadmin
+# Password stored in secret; override via --set rootPassword=<val>
+rootPassword: minioadmin
+
+# Buckets to create on startup via the mc (MinIO client) initContainer
+buckets:
+  - name: procurement-docs
+    policy: none
+    purge: false
+
+service:
+  type: ClusterIP
+  apiPort: 9000
+  consolePort: 9001
+
+storage:
+  size: 20Gi
+  storageClassName: ""
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi
+
+persistence:
+  enabled: true
+  accessModes:
+    - ReadWriteOnce
+  size: 20Gi
+  storageClassName: ""
+
+replicaCount: 1
+
+ingress:
+  enabled: false
+  # console ingress (when enabled=true):
+  # className: nginx
+  # host: minio-console.example.com
+  # tls: []
+
+# Pod security context
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsNonRoot: true

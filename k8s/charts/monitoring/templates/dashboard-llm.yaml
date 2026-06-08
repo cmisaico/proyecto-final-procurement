@@ -1,0 +1,169 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-llm-rag
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+    {{- include "monitoring.labels" . | nindent 4 }}
+data:
+  llm-rag.json: |-
+    {
+      "id": null,
+      "uid": "llm-rag",
+      "title": "LLM & RAG",
+      "tags": ["procurement", "llm", "rag"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "10s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Total LLM Tokens",
+          "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "sum(procurement_llm_tokens_total)",
+            "legendFormat": "Tokens"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "purple", "value": null }] } } }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Avg Inference Throughput",
+          "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "avg(procurement_llm_tokens_per_second)",
+            "legendFormat": "tok/s"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }, { "color": "green", "value": 10 }] } } }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "P95 Inference Latency",
+          "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "histogram_quantile(0.95, sum(rate(procurement_llm_inference_seconds_bucket[5m])) by (le))",
+            "legendFormat": "P95"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "unit": "s", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "red", "value": 30 }] } } }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Avg Retrieval Chunks",
+          "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "avg(procurement_retrieval_chunks_returned)",
+            "legendFormat": "Chunks"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "Token Rate (tokens/min)",
+          "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "sum(rate(procurement_llm_tokens_total[1m])) by (token_type)",
+            "legendFormat": "{{"{{"}} token_type {{"}}"}}"
+          }],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } } },
+          "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "LLM Inference Latency Percentiles",
+          "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(procurement_llm_inference_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(procurement_llm_inference_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(procurement_llm_inference_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P99"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2 } } },
+          "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Inference Throughput (tokens/sec)",
+          "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "avg(procurement_llm_tokens_per_second)",
+            "legendFormat": "tokens/sec"
+          }],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 20 } } },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "RAG Retrieval Latency",
+          "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(procurement_retrieval_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(procurement_retrieval_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P95"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2 } } },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "RAG Chunks Retrieved",
+          "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "histogram_quantile(0.50, sum(rate(procurement_retrieval_chunks_returned_bucket[5m])) by (le))",
+            "legendFormat": "Median chunks"
+          }],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } } },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 10,
+          "type": "stat",
+          "title": "Estimated Cost (USD)",
+          "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "sum(procurement_cost_estimated_usd)",
+            "legendFormat": "USD"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "red", "value": 100 }] } } }
+        }
+      ]
+    }

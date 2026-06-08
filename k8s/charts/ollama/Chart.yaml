@@ -1,0 +1,6 @@
+apiVersion: v2
+name: ollama
+description: Ollama LLM inference server with OpenAI-compatible API
+type: application
+version: 0.1.0
+appVersion: "0.9.0"

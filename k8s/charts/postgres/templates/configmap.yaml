@@ -1,0 +1,50 @@
+{{- if .Values.initScripts.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "postgres.initConfigMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgres.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install,pre-upgrade
+    helm.sh/hook-weight: "-5"
+data:
+  # ---------------------------------------------------------------------------
+  # SQL init scripts are mounted into the initContainer (init-db) which copies
+  # them to /docker-entrypoint-initdb.d/ before the main postgres container
+  # starts. PostgreSQL automatically executes every *.sql file found in that
+  # directory on first start-up (i.e. when the data directory is empty).
+  #
+  # Add additional keys here (filename: |  SQL content) or manage them from
+  # an external ConfigMap by setting initScripts.enabled=false and mounting
+  # your own ConfigMap at the same path.
+  # ---------------------------------------------------------------------------
+  00_extensions.sql: |
+    -- Enable commonly needed PostgreSQL extensions
+    CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+    CREATE EXTENSION IF NOT EXISTS "pg_trgm";
+    CREATE EXTENSION IF NOT EXISTS "btree_gin";
+
+  01_schema.sql: |
+    -- Procurement platform base schema
+    -- Actual table definitions live in the application migration files;
+    -- this script ensures the schema / role exists before migrations run.
+
+    -- Create application role with least privilege
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'procurement_app') THEN
+        CREATE ROLE procurement_app LOGIN PASSWORD 'changeme_in_production';
+      END IF;
+    END
+    $$;
+
+    -- Grant privileges on the default database
+    GRANT CONNECT ON DATABASE procurement_db TO procurement_app;
+    GRANT USAGE ON SCHEMA public TO procurement_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO procurement_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT USAGE, SELECT ON SEQUENCES TO procurement_app;
+{{- end }}

@@ -1,0 +1,18 @@
+apiVersion: v2
+name: langgraph
+description: LangGraph multi-agent worker
+type: application
+version: 0.1.0
+appVersion: "3.0.0"
+keywords:
+  - langgraph
+  - multi-agent
+  - worker
+  - procurement
+  - ai
+home: https://github.com/healoi/proyecto_final
+sources:
+  - https://github.com/healoi/proyecto_final
+maintainers:
+  - name: ai-platform-team
+    email: tech@healoi.com

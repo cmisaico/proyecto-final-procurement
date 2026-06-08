@@ -1,0 +1,12 @@
+nodeSelector:
+  nodepool: user
+
+tolerations: []
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+    - labelSelector:
+        matchLabels:
+          app: qdrant
+      topologyKey: kubernetes.io/hostname

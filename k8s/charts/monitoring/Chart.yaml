@@ -1,0 +1,28 @@
+apiVersion: v2
+name: monitoring
+description: Prometheus + Grafana + Loki monitoring stack
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+dependencies:
+  - name: kube-prometheus-stack
+    version: "55.5.0"
+    repository: "https://prometheus-community.github.io/helm-charts"
+    condition: prometheus.enabled
+  - name: loki-stack
+    version: "2.9.11"
+    repository: "https://grafana.github.io/helm-charts"
+    condition: loki.enabled
+
+maintainers:
+  - name: AI Procurement Platform Team
+    email: tech@healoi.com
+
+keywords:
+  - monitoring
+  - prometheus
+  - grafana
+  - loki
+  - observability
+  - procurement

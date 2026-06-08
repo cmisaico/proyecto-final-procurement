@@ -1,0 +1,89 @@
+# Default values for ollama Helm chart.
+
+replicaCount: 1
+
+image:
+  repository: ollama/ollama
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}
+securityContext: {}
+
+# ---- Model Configuration ---------------------------------------------------
+model:
+  # Ollama model name to pull and serve (e.g. "qwen2.5:7b", "llama3:8b")
+  name: "qwen2.5:7b"
+  # Alias exposed via the OpenAI-compatible API (must match what api-gateway sends)
+  servedModelName: "qwen2.5-7b"
+
+# ---- VRAM retention --------------------------------------------------------
+# How long Ollama keeps the model loaded in VRAM after the last request.
+# "-1" = never unload (model stays in VRAM permanently, best latency).
+# "5m" = unload after 5 minutes idle (default upstream behaviour).
+keepAlive: "-1"
+
+# ---- Resource Requests / Limits --------------------------------------------
+resources:
+  limits:
+    nvidia.com/gpu: 1
+    memory: 20Gi
+  requests:
+    nvidia.com/gpu: 1
+    memory: 14Gi
+
+# ---- Service ----------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 11434
+
+# ---- Persistence (model weight cache) ---------------------------------------
+persistence:
+  enabled: true
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+  size: 40Gi
+  mountPath: /root/.ollama
+
+# ---- Probes -----------------------------------------------------------------
+# Model download can take 10-20 min; start probing after 10 min.
+readinessProbe:
+  httpGet:
+    path: /api/tags
+    port: 11434
+  initialDelaySeconds: 60
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 40
+  successThreshold: 1
+
+livenessProbe:
+  httpGet:
+    path: /api/tags
+    port: 11434
+  initialDelaySeconds: 120
+  periodSeconds: 60
+  timeoutSeconds: 15
+  failureThreshold: 5
+
+# ---- Scheduling -------------------------------------------------------------
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+affinity: {}

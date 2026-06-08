@@ -1,0 +1,32 @@
+---
+# Default local-path StorageClass provided by K3s via Rancher local-path-provisioner
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    purpose: general-storage
+provisioner: rancher.io/local-path
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Delete
+
+---
+# Fast local StorageClass for stateful services (databases, caches, model stores)
+# Uses the same local-path provisioner but with distinct labeling and retain policy
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast-local
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "false"
+  labels:
+    app.kubernetes.io/managed-by: kubectl
+    purpose: stateful-fast-storage
+provisioner: rancher.io/local-path
+volumeBindingMode: WaitForFirstConsumer
+reclaimPolicy: Retain
+parameters:
+  nodePath: /opt/fast-local-storage

@@ -1,0 +1,147 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-procurement-platform
+  namespace: monitoring
+  labels:
+    app: ai-procurement-platform
+    release: prometheus
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  groups:
+    # ------------------------------------------------------------------
+    # API Gateway alerts
+    # ------------------------------------------------------------------
+    - name: api-gateway.rules
+      interval: 30s
+      rules:
+        # High error rate: HTTP 5xx responses exceed 5% of total traffic
+        - alert: HighAPIErrorRate
+          expr: |
+            (
+              sum(rate(http_requests_total{namespace="ai-platform", app="api-gateway", status=~"5.."}[5m]))
+              /
+              sum(rate(http_requests_total{namespace="ai-platform", app="api-gateway"}[5m]))
+            ) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+            namespace: ai-platform
+          annotations:
+            summary: "High API error rate detected"
+            description: >-
+              The API Gateway in namespace {{"{{"}} $labels.namespace {{"}}"}} is returning
+              HTTP 5xx errors at {{"{{"}} $value | humanizePercentage {{"}}"}} of all requests
+              (threshold: 5%). Investigate application logs immediately.
+            runbook_url: "https://wiki.internal/runbooks/api-high-error-rate"
+            dashboard_url: "http://grafana/d/procurement-api/api-gateway"
+
+        # High P99 latency: 99th-percentile response time exceeds 30 seconds
+        - alert: HighP99Latency
+          expr: |
+            histogram_quantile(
+              0.99,
+              sum by (le, app, namespace) (
+                rate(http_request_duration_seconds_bucket{
+                  namespace="ai-platform",
+                  app="api-gateway"
+                }[5m])
+              )
+            ) > 30
+          for: 10m
+          labels:
+            severity: warning
+            team: platform
+            namespace: ai-platform
+          annotations:
+            summary: "High P99 API latency"
+            description: >-
+              P99 latency for {{"{{"}} $labels.app {{"}}"}} in {{"{{"}} $labels.namespace {{"}}"}} is
+              {{"{{"}} $value | humanizeDuration {{"}}"}} (threshold: 30s). This may indicate
+              slow upstream services, resource contention, or large payloads.
+            runbook_url: "https://wiki.internal/runbooks/api-high-latency"
+            dashboard_url: "http://grafana/d/procurement-api/api-gateway"
+
+    # ------------------------------------------------------------------
+    # Workflow / LangGraph alerts
+    # ------------------------------------------------------------------
+    - name: workflow.rules
+      interval: 30s
+      rules:
+        # Workflow failure rate: failed workflows exceed 10% of executions
+        - alert: WorkflowFailureRate
+          expr: |
+            (
+              sum(rate(workflow_executions_total{namespace="ai-platform", status="failed"}[5m]))
+              /
+              sum(rate(workflow_executions_total{namespace="ai-platform"}[5m]))
+            ) > 0.10
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+            namespace: ai-platform
+          annotations:
+            summary: "High workflow failure rate"
+            description: >-
+              LangGraph workflow failure rate in namespace {{"{{"}} $labels.namespace {{"}}"}}
+              is {{"{{"}} $value | humanizePercentage {{"}}"}} (threshold: 10%). Check agent
+              state, LLM connectivity, and tool call logs.
+            runbook_url: "https://wiki.internal/runbooks/workflow-failure-rate"
+            dashboard_url: "http://grafana/d/procurement-langgraph/langgraph"
+
+    # ------------------------------------------------------------------
+    # GPU / DCGM alerts
+    # ------------------------------------------------------------------
+    - name: gpu.rules
+      interval: 30s
+      rules:
+        # GPU VRAM usage above 90% sustained for 15 minutes
+        - alert: GPUMemoryHigh
+          expr: |
+            (
+              DCGM_FI_DEV_FB_USED{namespace="ai-platform"}
+              /
+              DCGM_FI_DEV_FB_TOTAL{namespace="ai-platform"}
+            ) > 0.90
+          for: 15m
+          labels:
+            severity: warning
+            team: ml-infra
+            namespace: ai-platform
+          annotations:
+            summary: "GPU VRAM usage critically high"
+            description: >-
+              GPU {{"{{"}} $labels.gpu {{"}}"}} on node {{"{{"}} $labels.node {{"}}"}} in namespace
+              {{"{{"}} $labels.namespace {{"}}"}} has VRAM usage at
+              {{"{{"}} $value | humanizePercentage {{"}}"}} (threshold: 90%). Consider
+              reducing batch size, enabling model quantization, or scaling
+              horizontally.
+            runbook_url: "https://wiki.internal/runbooks/gpu-memory-high"
+            dashboard_url: "http://grafana/d/procurement-gpu/gpu-performance"
+
+    # ------------------------------------------------------------------
+    # vLLM alerts
+    # ------------------------------------------------------------------
+    - name: vllm.rules
+      interval: 30s
+      rules:
+        # Token generation throughput drops below 50 tokens/s sustained for 10 minutes
+        - alert: vLLMHighQueueLatency
+          expr: |
+            sum(rate(vllm:generation_tokens_total{namespace="ai-platform"}[1m])) < 50
+          for: 10m
+          labels:
+            severity: warning
+            team: ml-infra
+            namespace: ai-platform
+          annotations:
+            summary: "vLLM token generation throughput is low"
+            description: >-
+              vLLM in namespace {{"{{"}} $labels.namespace {{"}}"}} is generating tokens at
+              {{"{{"}} $value | humanize {{"}}"}} tokens/s, which is below the minimum
+              threshold of 50 tokens/s. This indicates queue back-pressure,
+              GPU saturation, or model loading issues.
+            runbook_url: "https://wiki.internal/runbooks/vllm-low-throughput"
+            dashboard_url: "http://grafana/d/procurement-vllm/vllm-performance"

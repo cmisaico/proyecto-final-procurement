@@ -1,0 +1,54 @@
+# Web framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# Settings
+pydantic-settings==2.6.1
+
+# Database
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+
+# Storage
+minio==7.2.12
+azure-storage-blob==12.23.1
+
+# Vector store
+qdrant-client==1.12.1
+
+# AI / LLM
+langchain==0.3.9
+langchain-community==0.3.9
+langchain-openai==0.2.14
+langchain-ollama==0.2.1
+langchain-text-splitters==0.3.2
+langgraph==0.2.56
+openai==1.58.1
+
+# PDF parsing
+pdfplumber==0.11.4
+pypdf==5.1.0
+
+# Token counting (Efficient Context Handling)
+tiktoken==0.8.0
+
+# HTTP
+httpx==0.28.0
+
+# Utilities
+python-multipart==0.0.17
+
+# ── Fase 3 — Observability ───────────────────────────────────────────────────
+
+# Prometheus metrics
+prometheus-client==0.21.1
+
+# OpenTelemetry core
+opentelemetry-api==1.28.2
+opentelemetry-sdk==1.28.2
+opentelemetry-instrumentation-fastapi>=0.49b0
+opentelemetry-instrumentation-httpx>=0.49b0
+opentelemetry-instrumentation-sqlalchemy>=0.49b0
+opentelemetry-exporter-otlp-proto-grpc==1.28.2
+opentelemetry-propagator-b3==1.28.2

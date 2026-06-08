@@ -1,0 +1,127 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "postgres.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "postgres.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "postgres.fullname" . }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "postgres.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "postgres.selectorLabels" . | nindent 8 }}
+    spec:
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsNonRoot: true
+
+      # -----------------------------------------------------------------------
+      # initContainer: copies SQL scripts from the ConfigMap into the directory
+      # that PostgreSQL scans on first boot (/docker-entrypoint-initdb.d/).
+      # Using an initContainer (rather than a direct mount) lets us keep the
+      # ConfigMap volume read-only while the initdb directory stays writable.
+      # -----------------------------------------------------------------------
+      {{- if .Values.initScripts.enabled }}
+      initContainers:
+        - name: init-db
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - |
+              echo "Copying SQL init scripts..."
+              cp /scripts/* /docker-entrypoint-initdb.d/
+              echo "Done."
+          volumeMounts:
+            - name: init-scripts
+              mountPath: /scripts
+              readOnly: true
+            - name: initdb-dir
+              mountPath: /docker-entrypoint-initdb.d
+      {{- end }}
+
+      containers:
+        - name: postgres
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgres.secretName" . }}
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgres.secretName" . }}
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "postgres.secretName" . }}
+                  key: POSTGRES_PASSWORD
+            # Store data in a sub-directory so the PVC mount point itself
+            # (owned by root) does not conflict with the postgres uid.
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+            successThreshold: 1
+
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - |
+                  pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -h 127.0.0.1 -p 5432
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 6
+            successThreshold: 1
+
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            {{- if .Values.initScripts.enabled }}
+            - name: initdb-dir
+              mountPath: /docker-entrypoint-initdb.d
+            {{- end }}
+
+      volumes:
+        {{- if .Values.initScripts.enabled }}
+        - name: init-scripts
+          configMap:
+            name: {{ include "postgres.initConfigMapName" . }}
+        - name: initdb-dir
+          emptyDir: {}
+        {{- end }}
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: {{ include "postgres.pvcName" . }}

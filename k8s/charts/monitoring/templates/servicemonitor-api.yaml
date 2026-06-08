@@ -1,0 +1,38 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api-gateway
+  namespace: monitoring
+  labels:
+    app: api-gateway
+    release: prometheus
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  # Select the api-gateway Service in the ai-platform namespace
+  selector:
+    matchLabels:
+      app: api-gateway
+  namespaceSelector:
+    matchNames:
+      - ai-platform
+  endpoints:
+    - port: metrics
+      path: /api/v1/metrics
+      interval: 10s
+      scrapeTimeout: 8s
+      scheme: http
+      # Relabel rules to enrich time-series with useful labels
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_service_name]
+          targetLabel: service
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+      metricRelabelings:
+        # Keep only metrics that start with known prefixes to reduce cardinality
+        - sourceLabels: [__name__]
+          regex: "(http_request_duration_seconds.*|http_requests_total.*|api_.*|process_.*|go_.*|python_.*)"
+          action: keep

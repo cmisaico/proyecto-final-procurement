@@ -1,0 +1,125 @@
+# Default values for langgraph Helm chart.
+
+# -- Number of replicas (overridden by HPA when enabled)
+replicaCount: 1
+
+image:
+  repository: procurement/api-gateway
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# -- Override the entrypoint to run the LangGraph worker instead of the API server
+command:
+  - python
+  - worker/main.py
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the chart name
+nameOverride: ""
+
+# -- Override the full release name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Whether to create a ServiceAccount
+  create: true
+  # -- Annotations to add to the service account
+  annotations: {}
+  # -- Name override; defaults to the fullname template
+  name: ""
+
+# -- Annotations to add to the Pod
+podAnnotations: {}
+
+# -- Labels to add to the Pod
+podLabels: {}
+
+# -- Pod security context
+podSecurityContext: {}
+
+# -- Container security context
+securityContext: {}
+
+# ---- Resource Requests / Limits ---------------------------------------------
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+
+# ---- Horizontal Pod Autoscaler -----------------------------------------------
+autoscaling:
+  enabled: true
+
+hpa:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 4
+  targetMemoryUtilizationPercentage: 80
+
+# ---- Probes ------------------------------------------------------------------
+# Workers do not expose an HTTP port; use a process-level exec probe instead.
+readinessProbe:
+  exec:
+    command:
+      - python
+      - -c
+      - "import os; os.path.exists('/proc/1/status') or __import__('sys').exit(1)"
+  initialDelaySeconds: 10
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+livenessProbe:
+  exec:
+    command:
+      - python
+      - -c
+      - "import os; os.path.exists('/proc/1/status') or __import__('sys').exit(1)"
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+# ---- Scheduling -------------------------------------------------------------
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations: []
+
+affinity: {}
+
+# ---- Environment Variables --------------------------------------------------
+# Non-secret configuration stored in ConfigMap
+config:
+  POSTGRES_HOST: "postgres.ai-platform.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "procurement_db"
+  POSTGRES_USER: "procurement"
+  VLLM_BASE_URL: "http://ollama.ai-platform.svc.cluster.local:11434/v1"
+  VLLM_MODEL: "qwen2.5:7b"
+  EMBEDDINGS_BASE_URL: "http://embeddings.ai-platform.svc.cluster.local:8080/v1"
+  QDRANT_HOST: "qdrant.ai-platform.svc.cluster.local"
+  QDRANT_PORT: "6333"
+  MINIO_ENDPOINT: "minio.ai-platform.svc.cluster.local:9000"
+  MINIO_BUCKET: "procurement-docs"
+  STORAGE_BACKEND: "minio"
+  AZURE_STORAGE_ACCOUNT: ""
+  AZURE_STORAGE_CONTAINER: ""
+  CONTEXT_TOP_K: "10"
+  MAX_CONTEXT_TOKENS: "4000"
+  GUARDRAIL_THRESHOLD: "0.35"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.ai-platform.svc.cluster.local:4317"
+  OTEL_SERVICE_NAME: "langgraph-worker"
+  WORKER_POLL_INTERVAL: "15"
+
+# Secret references — actual values live in a Kubernetes Secret.
+secrets:
+  postgresPassword: "procurement_pass"
+  minioAccessKey: "minioadmin"
+  minioSecretKey: "minioadmin"

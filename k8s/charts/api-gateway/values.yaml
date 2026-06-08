@@ -1,0 +1,133 @@
+# Default values for api-gateway Helm chart.
+
+# -- Number of replicas (overridden by HPA when enabled)
+replicaCount: 2
+
+image:
+  repository: procurement/api-gateway
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the chart name
+nameOverride: ""
+
+# -- Override the full release name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Whether to create a ServiceAccount
+  create: true
+  # -- Annotations to add to the service account
+  annotations: {}
+  # -- Name override; defaults to the fullname template
+  name: ""
+
+# -- Annotations to add to the Pod
+podAnnotations: {}
+
+# -- Labels to add to the Pod
+podLabels: {}
+
+# -- Pod security context
+podSecurityContext: {}
+
+# -- Container security context
+securityContext: {}
+
+# ---- Service -----------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 8000
+
+# ---- Ingress -----------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+  host: procurement.local
+  path: /
+  pathType: Prefix
+  tls: []
+
+# ---- Resource Requests / Limits ---------------------------------------------
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+# ---- Horizontal Pod Autoscaler -----------------------------------------------
+autoscaling:
+  enabled: true
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 70
+
+# ---- Probes ------------------------------------------------------------------
+readinessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8000
+  initialDelaySeconds: 20
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+livenessProbe:
+  httpGet:
+    path: /api/v1/health
+    port: 8000
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 3
+
+# ---- Scheduling -------------------------------------------------------------
+nodeSelector:
+  kubernetes.io/os: linux
+
+tolerations: []
+
+affinity: {}
+
+# ---- Environment Variables --------------------------------------------------
+# Non-secret configuration stored in ConfigMap
+config:
+  POSTGRES_HOST: "postgres.ai-platform.svc.cluster.local"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "procurement_db"
+  POSTGRES_USER: "procurement"
+  VLLM_BASE_URL: "http://ollama.ai-platform.svc.cluster.local:11434/v1"
+  VLLM_MODEL: "qwen2.5:7b"
+  EMBEDDINGS_BASE_URL: "http://embeddings.ai-platform.svc.cluster.local:8080/v1"
+  QDRANT_HOST: "qdrant.ai-platform.svc.cluster.local"
+  QDRANT_PORT: "6333"
+  MINIO_ENDPOINT: "minio.ai-platform.svc.cluster.local:9000"
+  MINIO_BUCKET: "procurement-docs"
+  STORAGE_BACKEND: "minio"
+  AZURE_STORAGE_ACCOUNT: ""
+  AZURE_STORAGE_CONTAINER: ""
+  CONTEXT_TOP_K: "10"
+  MAX_CONTEXT_TOKENS: "4000"
+  GUARDRAIL_THRESHOLD: "0.35"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.ai-platform.svc.cluster.local:4317"
+  OTEL_SERVICE_NAME: "procurement-api"
+
+# Secret references — actual values live in a Kubernetes Secret.
+# These keys must exist in the secret named <release-name>-secret.
+secrets:
+  postgresPassword: "procurement_pass"
+  minioAccessKey: "minioadmin"
+  minioSecretKey: "minioadmin"

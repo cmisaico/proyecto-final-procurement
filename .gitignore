@@ -1,0 +1,41 @@
+# Manuales académicos (no forman parte del código entregable)
+docs/
+scripts/
+observability/
+frontend/.next/
+frontend/node_modules
+
+# Secretos y variables de entorno
+.env
+*.env
+.procurement_env
+*_env
+*.tfvars
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+
+# Logs y temporales
+*.log
+/tmp/
+*.tmp
+*.sh
+
+# Kubernetes configs locales
+kubeconfig
+*.kubeconfig
+
+# IDEs y herramientas locales
+.idea/
+.vscode/
+.claude/
+*.iml
+.procurement_secrets

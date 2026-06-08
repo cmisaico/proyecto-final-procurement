@@ -1,0 +1,37 @@
+image:
+  repository: postgres
+  tag: "16-alpine"
+  pullPolicy: IfNotPresent
+
+database: procurement_db
+username: procurement
+# Password is stored in secret.yaml; override via --set password=<val> or external secret
+password: procurement_pass
+
+service:
+  type: ClusterIP
+  port: 5432
+
+storage:
+  size: 10Gi
+  storageClassName: ""
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+initScripts:
+  enabled: true
+  # SQL init scripts are expected in a ConfigMap named <release>-postgres-init
+  # and mounted into the initContainer which copies them to /docker-entrypoint-initdb.d/
+
+persistence:
+  enabled: true
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  storageClassName: ""

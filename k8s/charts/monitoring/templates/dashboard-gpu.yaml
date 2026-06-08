@@ -1,0 +1,172 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-gpu-infra
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+    {{- include "monitoring.labels" . | nindent 4 }}
+data:
+  gpu-infra.json: |-
+    {
+      "id": null,
+      "uid": "gpu-infra",
+      "title": "GPU & Infrastructure",
+      "tags": ["procurement", "gpu", "infrastructure"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "10s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "type": "gauge",
+          "title": "GPU Utilization",
+          "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "DCGM_FI_DEV_GPU_UTIL",
+            "legendFormat": "GPU {{"{{"}} gpu {{"}}"}}"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] } } }
+        },
+        {
+          "id": 2,
+          "type": "gauge",
+          "title": "GPU Memory Used",
+          "gridPos": { "x": 6, "y": 0, "w": 6, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "DCGM_FI_DEV_FB_USED / DCGM_FI_DEV_FB_TOTAL * 100",
+            "legendFormat": "VRAM %"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 70 }, { "color": "red", "value": 90 }] } } }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "GPU Temperature",
+          "gridPos": { "x": 12, "y": 0, "w": 6, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "DCGM_FI_DEV_GPU_TEMP",
+            "legendFormat": "°C"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "unit": "celsius", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 75 }, { "color": "red", "value": 85 }] } } }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "GPU Memory Free",
+          "gridPos": { "x": 18, "y": 0, "w": 6, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "DCGM_FI_DEV_FB_FREE",
+            "legendFormat": "Free MiB"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "unit": "mebibytes", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "yellow", "value": 2048 }, { "color": "green", "value": 8192 }] } } }
+        },
+        {
+          "id": 5,
+          "type": "timeseries",
+          "title": "GPU Utilization Over Time",
+          "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "DCGM_FI_DEV_GPU_UTIL",
+            "legendFormat": "GPU {{"{{"}} gpu {{"}}"}} Utilization"
+          }],
+          "fieldConfig": { "defaults": { "unit": "percent", "min": 0, "max": 100, "custom": { "lineWidth": 2, "fillOpacity": 20 } } },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "GPU Memory Usage Over Time",
+          "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [
+            {
+              "expr": "DCGM_FI_DEV_FB_USED",
+              "legendFormat": "Used MiB"
+            },
+            {
+              "expr": "DCGM_FI_DEV_FB_FREE",
+              "legendFormat": "Free MiB"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "mebibytes", "custom": { "lineWidth": 2 } } },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Pod CPU Usage (ai-platform)",
+          "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"ai-platform\", container!=\"\"}[5m])) by (pod)",
+            "legendFormat": "{{"{{"}} pod {{"}}"}}"
+          }],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2 } } },
+          "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Pod Memory Usage (ai-platform)",
+          "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "sum(container_memory_working_set_bytes{namespace=\"ai-platform\", container!=\"\"}) by (pod)",
+            "legendFormat": "{{"{{"}} pod {{"}}"}}"
+          }],
+          "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "lineWidth": 2 } } },
+          "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
+        },
+        {
+          "id": 9,
+          "type": "stat",
+          "title": "Running Pods (ai-platform)",
+          "gridPos": { "x": 0, "y": 22, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "count(kube_pod_status_phase{namespace=\"ai-platform\", phase=\"Running\"})",
+            "legendFormat": "Running"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } } }
+        },
+        {
+          "id": 10,
+          "type": "stat",
+          "title": "Pending Pods",
+          "gridPos": { "x": 6, "y": 22, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "count(kube_pod_status_phase{namespace=\"ai-platform\", phase=\"Pending\"}) or vector(0)",
+            "legendFormat": "Pending"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 3 }] } } }
+        },
+        {
+          "id": 11,
+          "type": "timeseries",
+          "title": "GPU Temperature Over Time",
+          "gridPos": { "x": 12, "y": 22, "w": 12, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "DCGM_FI_DEV_GPU_TEMP",
+            "legendFormat": "GPU Temp °C"
+          }],
+          "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "lineWidth": 2 } }, "overrides": [{ "matcher": { "id": "byName", "options": "GPU Temp °C" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] }] },
+          "options": { "tooltip": { "mode": "multi" } }
+        }
+      ]
+    }

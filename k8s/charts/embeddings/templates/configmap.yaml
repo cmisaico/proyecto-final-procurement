@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "embeddings.configMapName" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "embeddings.labels" . | nindent 4 }}
+data:
+  # ---------------------------------------------------------------------------
+  # Model configuration — consumed by the FastAPI embedding service as
+  # environment variables loaded from this ConfigMap.
+  # ---------------------------------------------------------------------------
+
+  # Hugging Face model identifier or local path inside the container
+  MODEL_NAME: {{ .Values.model.name | quote }}
+
+  # Output embedding dimensionality (must match the Qdrant collection vector size)
+  EMBEDDING_DIMENSION: {{ .Values.model.dimension | quote }}
+
+  # Compute device: cpu | cuda | mps
+  MODEL_DEVICE: {{ .Values.model.device | quote }}
+
+  # Maximum input token length accepted by the tokenizer
+  MAX_LENGTH: {{ .Values.model.maxLength | quote }}
+
+  # Forward-pass batch size for encode() calls
+  BATCH_SIZE: {{ .Values.model.batchSize | quote }}
+
+  # HTTP port the uvicorn server listens on (must match service.port)
+  PORT: {{ .Values.service.port | quote }}
+
+  # Hugging Face hub cache directory (must be writable)
+  HF_HOME: "/app/.cache/huggingface"
+  TRANSFORMERS_CACHE: "/app/.cache/huggingface/transformers"
+  SENTENCE_TRANSFORMERS_HOME: "/app/.cache/sentence_transformers"

@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "embeddings.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "embeddings.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "embeddings.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "embeddings.selectorLabels" . | nindent 8 }}
+      annotations:
+        # Roll pods when ConfigMap changes
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      containers:
+        - name: embeddings
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+
+          # Load model / service settings from ConfigMap
+          envFrom:
+            - configMapRef:
+                name: {{ include "embeddings.configMapName" . }}
+
+          # Any additional secrets or overrides (e.g. HF_TOKEN)
+          {{- if .Values.extraEnv }}
+          env:
+            {{- toYaml .Values.extraEnv | nindent 12 }}
+          {{- end }}
+
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+
+          # The /health endpoint is implemented by the FastAPI app:
+          #   @app.get("/health")
+          #   def health():
+          #       return {"status": "ok", "model": MODEL_NAME}
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            # Model download + load can take 60-120 s on first boot
+            initialDelaySeconds: 60
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 8
+            successThreshold: 1
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 5
+            successThreshold: 1
+
+          # Startup probe gives the service time to download the model on cold start
+          # without the liveness probe killing the pod prematurely.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            # Allow up to 15 * 20 = 300 s for startup (model download)
+            failureThreshold: 20
+            successThreshold: 1
+
+          volumeMounts:
+            - name: model-cache
+              mountPath: /app/.cache
+
+      volumes:
+        - name: model-cache
+          {{- if .Values.modelCache.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "embeddings.modelCachePvcName" . }}
+          {{- else }}
+          # emptyDir is ephemeral: model weights are re-downloaded on every pod restart.
+          # Enable modelCache.persistence to avoid this.
+          emptyDir: {}
+          {{- end }}

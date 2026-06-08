@@ -1,0 +1,17 @@
+apiVersion: v2
+name: api-gateway
+description: FastAPI gateway for procurement platform
+type: application
+version: 0.1.0
+appVersion: "3.0.0"
+keywords:
+  - fastapi
+  - procurement
+  - api-gateway
+  - ai
+home: https://github.com/healoi/proyecto_final
+sources:
+  - https://github.com/healoi/proyecto_final
+maintainers:
+  - name: ai-platform-team
+    email: tech@healoi.com

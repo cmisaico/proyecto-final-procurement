@@ -1,0 +1,55 @@
+{{- if .Values.buckets }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "minio.fullname" . }}-create-buckets
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "minio.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-weight: "5"
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 6
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: create-buckets
+          image: minio/mc:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "minio.secretName" . }}
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "minio.secretName" . }}
+                  key: MINIO_ROOT_PASSWORD
+          command:
+            - sh
+            - -c
+            - |
+              set -e
+              MINIO_URL="http://{{ include "minio.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.apiPort }}"
+              echo "Waiting for MinIO at $MINIO_URL..."
+              until mc alias set local "$MINIO_URL" \
+                    "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" > /dev/null 2>&1; do
+                echo "MinIO not ready yet, retrying in 5s..."
+                sleep 5
+              done
+              {{- range .Values.buckets }}
+              echo "Ensuring bucket '{{ .name }}' exists..."
+              mc mb --ignore-existing local/{{ .name }}
+              {{- if eq .policy "public" }}
+              mc anonymous set public local/{{ .name }}
+              {{- else if eq .policy "download" }}
+              mc anonymous set download local/{{ .name }}
+              {{- end }}
+              {{- end }}
+              echo "Bucket setup complete."
+{{- end }}

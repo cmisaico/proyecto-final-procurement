@@ -1,0 +1,153 @@
+# Default values for vllm Helm chart.
+
+# -- Number of replicas. vLLM with a single GPU should not be scaled beyond 1.
+# -- HuggingFace Hub token — required for gated models like Qwen2.5-7B
+# Pass at install time: --set hfToken=hf_xxxx
+hfToken: ""
+
+replicaCount: 1
+
+image:
+  repository: vllm/vllm-openai
+  tag: "v0.8.5.post1"
+  pullPolicy: IfNotPresent
+
+# -- Image pull secrets for private registries
+imagePullSecrets: []
+
+# -- Override the chart name
+nameOverride: ""
+
+# -- Override the full release name
+fullnameOverride: ""
+
+serviceAccount:
+  # -- Whether to create a ServiceAccount
+  create: true
+  # -- Annotations to add to the service account
+  annotations: {}
+  # -- Name override; defaults to the fullname template
+  name: ""
+
+# -- Annotations to add to the Pod
+podAnnotations: {}
+
+# -- Labels to add to the Pod
+podLabels: {}
+
+# -- Pod security context
+podSecurityContext: {}
+
+# -- Container security context
+securityContext: {}
+
+# ---- vLLM Model Configuration -----------------------------------------------
+model:
+  # -- HuggingFace model ID to serve
+  # Dev (T4 Spot): AWQ 4-bit variant — ocupa ~4.2 GB VRAM de 16 GB disponibles
+  # Prod (L4):     Qwen/Qwen2.5-7B-Instruct  (FP16, ~14.5 GB VRAM)
+  name: Qwen/Qwen2.5-7B-Instruct-AWQ
+  # -- Alias expuesto por la API compatible con OpenAI
+  servedModelName: qwen2.5-7b
+  # -- Fracción de VRAM a reservar para el modelo + KV cache
+  gpuMemoryUtilization: "0.85"
+  # -- Longitud máxima de secuencia
+  maxModelLen: 8192
+  # -- Máximo de tokens procesados por iteración
+  maxNumBatchedTokens: 8192
+  # -- Cuantización: "awq" | "gptq" | "bitsandbytes" | "" (vacío = ninguna)
+  quantization: awq
+  # -- dtype: "auto" es obligatorio con AWQ/GPTQ; "bfloat16" para FP16
+  dtype: auto
+  # -- Permitir código remoto del repo del modelo
+  trustRemoteCode: true
+
+# ---- Resource Requests / Limits ---------------------------------------------
+# Dev T4: AWQ modelo ~4.2 GB VRAM, ~7 GB RAM sistema. T4 tiene 28 GB RAM y 16 GB VRAM.
+resources:
+  limits:
+    nvidia.com/gpu: 1
+    memory: 14Gi
+  requests:
+    nvidia.com/gpu: 1
+    memory: 8Gi
+
+# ---- Service -----------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 8000
+  # -- Annotations for the Service object
+  annotations: {}
+
+# ---- Horizontal Pod Autoscaler -----------------------------------------------
+# vLLM cannot easily scale beyond 1 GPU per replica, so HPA is disabled.
+hpa:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 80
+
+# ---- Persistence (model weight cache) ---------------------------------------
+persistence:
+  enabled: true
+  # -- StorageClass name; leave empty to use cluster default
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+  # Dev: AWQ model ~4.2 GB en disco; 20Gi es suficiente con margen
+  # Prod FP16: cambiar a 40Gi
+  size: 20Gi
+  # -- Mount path inside the container for the HuggingFace cache
+  mountPath: /data/cache
+
+# ---- Environment Variables --------------------------------------------------
+env:
+  # -- HuggingFace Hub token loaded from a Kubernetes Secret
+  - name: HUGGING_FACE_HUB_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: vllm-hf-token
+        key: HF_TOKEN
+  # -- Disable HuggingFace progress bars for cleaner container logs
+  - name: HF_HUB_DISABLE_PROGRESS_BARS
+    value: "1"
+  # -- Increase timeout for large model downloads
+  - name: HF_HUB_DOWNLOAD_TIMEOUT
+    value: "300"
+
+# ---- Probes -----------------------------------------------------------------
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 300
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 5
+  successThreshold: 1
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 600
+  periodSeconds: 60
+  timeoutSeconds: 15
+  failureThreshold: 3
+
+# ---- Scheduling -------------------------------------------------------------
+nodeSelector:
+  kubernetes.io/os: linux
+  nodepool: gpu
+  hardware: nvidia-t4
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+  # Tolerar el taint automático de nodos Spot en AKS
+  - key: kubernetes.azure.com/scalesetpriority
+    operator: Equal
+    value: spot
+    effect: NoSchedule
+
+affinity: {}
