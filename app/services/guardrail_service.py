@@ -7,6 +7,28 @@ from app.services.context_handler import ContextResult
 
 logger = get_logger(__name__)
 
+# Patrones para detectar prompt injection y jailbreak en el input del usuario.
+# Solo se aplican en validate_input() — no en la validación de salida del LLM.
+_INJECTION_PATTERNS = [
+    r"ignore\s+(previous|all|above|prior)\s+instructions",
+    r"forget\s+(everything|all|your|previous)",
+    r"disregard\s+(all|previous|prior|above)",
+    r"\bsystem\s*prompt\b",
+    r"\byou\s+are\s+now\b",
+    r"\bact\s+as\s+(a|an|if)\b",
+    r"\bjailbreak\b",
+    r"\bDAN\s+mode\b",
+    r"do\s+anything\s+now",
+    r"pretend\s+(you\s+are|to\s+be)",
+    r"bypass\s+(your|all|the)\s+(restrictions|rules|filters|guidelines)",
+    r"ignora\s+(las|todas\s+las|tus)\s+(instrucciones|restricciones|reglas)",
+    r"olvida\s+(todo|las\s+instrucciones\s+anteriores)",
+    r"ahora\s+eres\b",
+    r"actúa\s+como\s+(si|un|una)\b",
+]
+
+_COMPILED_PATTERNS = [re.compile(p, re.IGNORECASE) for p in _INJECTION_PATTERNS]
+
 
 class GuardrailResult:
     def __init__(
@@ -40,6 +62,23 @@ class GuardrailService:
 
     def __init__(self, threshold: float = None):
         self._threshold = threshold or settings.GUARDRAIL_THRESHOLD
+
+    def validate_input(self, text: str) -> GuardrailResult:
+        """Pre-LLM check: detect prompt injection and jailbreak attempts."""
+        for pattern in _COMPILED_PATTERNS:
+            match = pattern.search(text)
+            if match:
+                logger.warning(
+                    "Guardrail: prompt injection detected",
+                    extra={"pattern": pattern.pattern, "snippet": text[:120]},
+                )
+                return GuardrailResult(
+                    passed=False,
+                    score=0.0,
+                    flagged_claims=[match.group(0)],
+                    message=f"Prompt injection detected: '{match.group(0)}'",
+                )
+        return GuardrailResult(passed=True, score=1.0, flagged_claims=[], message="OK")
 
     def validate(
         self,

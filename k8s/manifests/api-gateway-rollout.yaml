@@ -1,0 +1,130 @@
+---
+# Service estable: recibe el 100% del tráfico en estado normal.
+# Argo Rollouts modifica su selector durante el canary para apuntar
+# a la versión estable (N-1) mientras la nueva versión se valida.
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway-stable
+  namespace: ai-platform
+  labels:
+    app: api-gateway
+spec:
+  selector:
+    app: api-gateway
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+---
+# Service canary: recibe el % de tráfico definido en cada step del Rollout.
+# Argo Rollouts actualiza su selector para apuntar a la nueva versión (N).
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway-canary
+  namespace: ai-platform
+  labels:
+    app: api-gateway
+spec:
+  selector:
+    app: api-gateway
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: api-gateway
+  namespace: ai-platform
+  labels:
+    app: api-gateway
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  # 15 minutos: imagen grande (~1 GB) + arranque de FastAPI + warmup de conexiones
+  progressDeadlineSeconds: 900
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      nodeSelector:
+        nodepool: user
+      containers:
+      - name: api-gateway
+        image: acrprocurementazdev.azurecr.io/procurement-api:latest
+        ports:
+        - name: http
+          containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: api-gateway-config
+        - secretRef:
+            name: api-gateway-secret
+        env:
+        - name: AZURE_STORAGE_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: procurement-storage-secret
+              key: connection-string
+              optional: true
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+        readinessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          failureThreshold: 6
+        livenessProbe:
+          httpGet:
+            path: /api/v1/health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          failureThreshold: 3
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: api-gateway
+  strategy:
+    canary:
+      maxSurge: 1
+      maxUnavailable: 1
+      steps:
+      - setWeight: 10
+      - pause:
+          duration: 2m
+      - analysis:
+          templates:
+          - templateName: success-rate
+          args:
+          - name: service-name
+            value: api-gateway
+      - setWeight: 50
+      - pause:
+          duration: 2m
+      - analysis:
+          templates:
+          - templateName: success-rate
+          args:
+          - name: service-name
+            value: api-gateway
+      - setWeight: 100
+      canaryService: api-gateway-canary
+      stableService: api-gateway-stable

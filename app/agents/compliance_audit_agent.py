@@ -105,6 +105,17 @@ class ComplianceAuditAgent:
             agent_name=self.NAME,
         )
 
+        if not guardrail_result.passed:
+            logger.warning(
+                "AuditAgent guardrail FAILED — output discarded, using fallback",
+                extra={
+                    "tender_id": tender_id,
+                    "score": guardrail_result.score,
+                    "flagged": guardrail_result.flagged_claims,
+                },
+            )
+            output = self._fallback_output()
+
         logger.info(
             "AuditAgent completed",
             extra={
@@ -113,6 +124,7 @@ class ComplianceAuditAgent:
                 "risk_level": output.get("risk_level"),
                 "issues": len(output.get("issues", [])),
                 "guardrail_score": guardrail_result.score,
+                "guardrail_passed": guardrail_result.passed,
             },
         )
 

@@ -1,5 +1,6 @@
 # ── Stage 1: build ─────────────────────────────────────────────────────────
-FROM python:3.12-slim AS builder
+ARG REGISTRY=""
+FROM ${REGISTRY}python:3.12-slim AS builder
 
 WORKDIR /app
 
@@ -11,7 +12,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 # ── Stage 2: runtime ────────────────────────────────────────────────────────
-FROM python:3.12-slim
+FROM ${REGISTRY}python:3.12-slim
 
 # System deps for pdfplumber / pillow (runtime only)
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -1,0 +1,91 @@
+# vLLM overlay para NVIDIA L4 (24 GB VRAM, Arquitectura Ada Lovelace)
+#
+# Plataforma: GCP g2-standard-4 (g2-standard-8 para 2 GPU)
+#             AWS g6.xlarge (L4 en EKS)
+#             Azure: no disponible aún de forma nativa (usar A10 como alternativa)
+#
+# Ganancia vs T4:
+#   - 2.4× más VRAM (24 vs 16 GB)  → puede servir Qwen2.5-7B en FP16 sin AWQ
+#   - 2.7× más bandwidth (~864 vs ~320 GB/s) → mayor throughput de tokens
+#   - 72 W TDP vs 70 W T4 → eficiencia energética similar pero mayor rendimiento
+#
+# Modelo recomendado: Qwen/Qwen2.5-7B-Instruct (FP16, ~14.5 GB)
+# Alternativa 14B:    Qwen/Qwen2.5-14B-Instruct-AWQ (4-bit, ~8 GB)
+#
+# Despliegue:
+#   helm upgrade vllm k8s/charts/vllm -n ai-platform -f k8s/azure/vllm-l4.yaml
+
+image:
+  repository: acrprocurementazdev.azurecr.io/vllm-openai
+  tag: "v0.8.5.post1"
+  pullPolicy: IfNotPresent
+
+model:
+  # FP16 completo — aprovecha los 24 GB de VRAM del L4
+  name: Qwen/Qwen2.5-7B-Instruct
+  servedModelName: qwen2.5-7b
+  gpuMemoryUtilization: "0.90"
+  maxModelLen: 16384        # L4 soporta contexto más largo que T4
+  maxNumBatchedTokens: 16384
+  quantization: ""          # Sin cuantización — FP16 nativo
+  dtype: bfloat16           # bfloat16 nativo en Ada Lovelace
+  trustRemoteCode: true
+  maxNumSeqs: 512           # Más VRAM → más secuencias concurrentes
+  enableChunkedPrefill: true
+
+resources:
+  requests:
+    memory: "20Gi"
+    cpu: "4"
+    nvidia.com/gpu: "1"
+  limits:
+    memory: "26Gi"
+    cpu: "8"
+    nvidia.com/gpu: "1"
+
+nodeSelector:
+  kubernetes.io/os: linux
+  nodepool: gpu
+  hardware: nvidia-l4
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: vllm
+          topologyKey: kubernetes.io/hostname
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  # L4 carga FP16 más rápido que T4 con AWQ (driver distinto)
+  initialDelaySeconds: 180
+  periodSeconds: 20
+  timeoutSeconds: 10
+  failureThreshold: 5
+  successThreshold: 1
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 360
+  periodSeconds: 60
+  timeoutSeconds: 15
+  failureThreshold: 3
+
+speculative:
+  enabled: true
+  draftModel: "[ngram]"
+  numSpeculativeTokens: 5
+  ngramPromptLookupMin: 4
+  ngramPromptLookupMax: 8

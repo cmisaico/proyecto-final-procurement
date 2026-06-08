@@ -11,6 +11,7 @@ data:
   POSTGRES_PORT: {{ .Values.config.POSTGRES_PORT | quote }}
   POSTGRES_DB: {{ .Values.config.POSTGRES_DB | quote }}
   POSTGRES_USER: {{ .Values.config.POSTGRES_USER | quote }}
+  POSTGRES_SSLMODE: {{ .Values.config.POSTGRES_SSLMODE | quote }}
 
   # ---- vLLM inference --------------------------------------------------------
   VLLM_BASE_URL: {{ .Values.config.VLLM_BASE_URL | quote }}

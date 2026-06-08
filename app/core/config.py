@@ -14,6 +14,8 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "procurement_db"
     POSTGRES_USER: str = "procurement"
     POSTGRES_PASSWORD: str = "procurement_pass"
+    # "require" para Azure PostgreSQL Flexible Server; "disable" para PostgreSQL local
+    POSTGRES_SSLMODE: str = "disable"
 
     @property
     def DATABASE_URL(self) -> str:
@@ -24,9 +26,10 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL_SYNC(self) -> str:
+        ssl_param = "?sslmode=require" if self.POSTGRES_SSLMODE == "require" else ""
         return (
             f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
-            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}{ssl_param}"
         )
 
     # Storage backend: "minio" (local/k3s) | "azure" (AKS)
@@ -41,7 +44,7 @@ class Settings(BaseSettings):
 
     # Azure Blob Storage (used when STORAGE_BACKEND=azure)
     AZURE_STORAGE_CONNECTION_STRING: str = ""
-    AZURE_STORAGE_ACCOUNT: str = "stprocurementazdev"
+    AZURE_STORAGE_ACCOUNT: str = "stprocurementazadev"
     AZURE_STORAGE_CONTAINER: str = "licitaciones"
 
     # Qdrant
@@ -66,6 +69,9 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://ollama:11434"
     OLLAMA_LLM_MODEL: str = "qwen2.5:7b"
     OLLAMA_EMBED_MODEL: str = "nomic-embed-text"
+
+    # Prometheus (para cost analysis multi-pod)
+    PROMETHEUS_URL: str = "http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090"
 
     # Chunking
     CHUNK_SIZE: int = 1000

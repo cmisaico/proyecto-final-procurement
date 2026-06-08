@@ -4,10 +4,13 @@ scripts/
 observability/
 frontend/.next/
 frontend/node_modules
+fases/
+fase05_manual
 
 # Secretos y variables de entorno
 .env
 *.env
+*.sh
 .procurement_env
 *_env
 *.tfvars

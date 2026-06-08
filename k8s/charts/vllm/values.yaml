@@ -61,6 +61,13 @@ model:
   dtype: auto
   # -- Permitir código remoto del repo del modelo
   trustRemoteCode: true
+  # -- Máximo de secuencias concurrentes en el scheduler (slots de KV cache)
+  # Subir este valor permite más concurrencia a costa de más presión en VRAM.
+  # Experimento: probar 64, 128, 256, 512 con max-concurrency-test.js
+  maxNumSeqs: 256
+  # -- Chunked prefill: divide prefills largos en chunks para reducir
+  # la latencia de TTFT en requests concurrentes (recomendado con seqs largas)
+  enableChunkedPrefill: true
 
 # ---- Resource Requests / Limits ---------------------------------------------
 # Dev T4: AWQ modelo ~4.2 GB VRAM, ~7 GB RAM sistema. T4 tiene 28 GB RAM y 16 GB VRAM.
@@ -151,3 +158,22 @@ tolerations:
     effect: NoSchedule
 
 affinity: {}
+
+# ---- Speculative Decoding ---------------------------------------------------
+# Experimento: comparar latencia y throughput con/sin speculative decoding.
+# Ver k6/scripts/speculative-decoding-test.js para la metodología.
+speculative:
+  enabled: false
+
+  # Modo A — Ngram speculation (sin modelo extra, compatible con AWQ en T4):
+  #   No requiere VRAM adicional. Funciona buscando n-gramas del prompt
+  #   como draft tokens. Ideal para texto formulaico/extractivo.
+  draftModel: "[ngram]"
+  numSpeculativeTokens: 5
+  ngramPromptLookupMin: 4   # mínimo de tokens coincidentes para usar el ngram
+  ngramPromptLookupMax: 8   # ventana de búsqueda de ngrams en el prompt
+
+  # Modo B — Draft model (descomentar para usar; requiere ~1 GB VRAM extra):
+  # draftModel: "Qwen/Qwen2.5-0.5B-Instruct-AWQ"
+  # numSpeculativeTokens: 5
+  # ngramPromptLookupMin es ignorado cuando draftModel no es "[ngram]"

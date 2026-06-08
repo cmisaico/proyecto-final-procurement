@@ -110,3 +110,16 @@ variable "tags" {
   description = "Common tags for all resources"
   default     = {}
 }
+
+# ── AKS ────────────────────────────────────────────────────────────────────────
+variable "aks_cluster_name" {
+  type        = string
+  description = "AKS cluster name"
+  default     = "aks-procurement-dev"
+}
+
+variable "kubernetes_version" {
+  type        = string
+  description = "Kubernetes version for the AKS cluster"
+  default     = "1.29"
+}

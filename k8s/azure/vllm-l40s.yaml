@@ -1,0 +1,104 @@
+# vLLM overlay para NVIDIA L40S (48 GB VRAM, Arquitectura Ada Lovelace)
+#
+# Plataforma: GCP a3-highgpu-1g (L40S en GKE)
+#             AWS p4de.24xlarge (alternativa con A100 80GB)
+#             Azure: no disponible; usar Standard_NC24ads_A100_v4 (A100 80GB) como proxy
+#
+# L40S vs T4:
+#   - 3× más VRAM (48 vs 16 GB)  → modelos 14B FP16 o 70B AWQ
+#   - ~2.7× más bandwidth
+#   - 350 W TDP — nodo dedicado, requiere cooling adecuado
+#   - Ada Lovelace: FP8 nativo para cuantización de siguiente generación
+#
+# Modelos disponibles con 48 GB VRAM:
+#   - Qwen/Qwen2.5-14B-Instruct (FP16, ~28 GB) — uso recomendado
+#   - Qwen/Qwen2.5-72B-Instruct-AWQ (4-bit, ~36 GB) — uso avanzado
+#   - Tensor parallelism posible con 2× L40S (96 GB total)
+#
+# Despliegue con modelo 14B FP16:
+#   helm upgrade vllm k8s/charts/vllm -n ai-platform -f k8s/azure/vllm-l40s.yaml
+#
+# Despliegue con modelo 72B AWQ (cambiar model.name):
+#   helm upgrade vllm k8s/charts/vllm -n ai-platform -f k8s/azure/vllm-l40s.yaml \
+#     --set model.name=Qwen/Qwen2.5-72B-Instruct-AWQ \
+#     --set model.quantization=awq \
+#     --set model.dtype=auto
+
+image:
+  repository: acrprocurementazdev.azurecr.io/vllm-openai
+  tag: "v0.8.5.post1"
+  pullPolicy: IfNotPresent
+
+model:
+  name: Qwen/Qwen2.5-14B-Instruct
+  servedModelName: qwen2.5-14b
+  gpuMemoryUtilization: "0.90"
+  maxModelLen: 32768          # 32K contexto nativo de Qwen2.5-14B
+  maxNumBatchedTokens: 32768
+  quantization: ""
+  dtype: bfloat16
+  trustRemoteCode: true
+  maxNumSeqs: 512
+  enableChunkedPrefill: true
+
+resources:
+  requests:
+    memory: "40Gi"
+    cpu: "8"
+    nvidia.com/gpu: "1"
+  limits:
+    memory: "56Gi"
+    cpu: "16"
+    nvidia.com/gpu: "1"
+
+persistence:
+  enabled: true
+  size: 60Gi    # 14B FP16 ocupa ~28 GB en disco
+
+nodeSelector:
+  kubernetes.io/os: linux
+  nodepool: gpu
+  hardware: nvidia-l40s
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: vllm
+          topologyKey: kubernetes.io/hostname
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  # 14B FP16 tarda más en cargar (~8-12 min en frío)
+  initialDelaySeconds: 480
+  periodSeconds: 30
+  timeoutSeconds: 10
+  failureThreshold: 10
+  successThreshold: 1
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 720
+  periodSeconds: 60
+  timeoutSeconds: 15
+  failureThreshold: 3
+
+speculative:
+  # Con 14B se puede usar draft model 1.5B para mayor acceptance rate
+  enabled: true
+  draftModel: "[ngram]"
+  numSpeculativeTokens: 7    # L40S soporta más tokens especulativos
+  ngramPromptLookupMin: 4
+  ngramPromptLookupMax: 10

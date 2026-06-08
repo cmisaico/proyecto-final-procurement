@@ -11,7 +11,7 @@ const serviceIcons: Record<string, React.ElementType> = {
   postgres: Database,
   qdrant:   HardDrive,
   minio:    HardDrive,
-  ollama:   Brain,
+  vllm:     Brain,
 };
 
 function ServiceCard({ name, info }: { name: string; info: { status: string; latency_ms: number; detail?: string } }) {

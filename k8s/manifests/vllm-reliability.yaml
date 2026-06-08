@@ -1,0 +1,115 @@
+---
+# PodDisruptionBudget: garantiza que al menos 1 réplica de vLLM
+# permanezca disponible durante drains del Cluster Autoscaler.
+# Sin esto, el autoscaler puede eliminar el único nodo GPU activo
+# mientras tiene un pod de vLLM corriendo, causando cold-start de
+# varios minutos (descarga del modelo + calentamiento de KV cache).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: vllm-pdb
+  namespace: ai-platform
+  labels:
+    app.kubernetes.io/name: vllm
+    app.kubernetes.io/component: inference
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: vllm
+
+---
+# ServiceAccount dedicado para el CronJob de warm-up.
+# Solo necesita acceso HTTP interno al servicio vLLM — sin permisos K8s.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vllm-warmup
+  namespace: ai-platform
+  labels:
+    app.kubernetes.io/name: vllm-warmup
+    app.kubernetes.io/component: maintenance
+
+---
+# CronJob de warm-up: envía una request dummy cada 3 minutos.
+# Objetivos:
+#   1. Mantiene el proceso vLLM activo y el modelo en VRAM
+#   2. Evita que la GPU entre en estados de bajo consumo (P3→P0)
+#   3. Mantiene caliente el pool de CUDA contexts y el KV cache pre-allocado
+#   4. Actúa como health-check pasivo para detectar degradación silenciosa
+#
+# Frecuencia: cada 3 min (< 5 min = dentro de la ventana de cache de Prometheus)
+# Tamaño: 1 token de salida — coste negligible (~0.1% GPU time)
+# Falla silenciosamente: exit 0 siempre. El objetivo es mantener caliente,
+# no alertar por indisponibilidad (eso lo hace el livenessProbe del Deployment).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vllm-warmup
+  namespace: ai-platform
+  labels:
+    app.kubernetes.io/name: vllm-warmup
+    app.kubernetes.io/component: maintenance
+spec:
+  schedule: "*/3 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  startingDeadlineSeconds: 60
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 45
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: vllm-warmup
+          annotations: {}
+        spec:
+          serviceAccountName: vllm-warmup
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 10
+          containers:
+            - name: warmup
+              image: curlimages/curl:8.11.0
+              imagePullPolicy: IfNotPresent
+              command:
+                - sh
+                - -c
+                - |
+                  MODEL=${VLLM_MODEL:-"qwen2.5-7b-awq"}
+                  URL="http://vllm.ai-platform.svc.cluster.local:8000/v1/completions"
+                  PAYLOAD="{\"model\":\"${MODEL}\",\"prompt\":\"warmup\",\"max_tokens\":1,\"temperature\":0}"
+
+                  HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" \
+                    -X POST "${URL}" \
+                    -H "Content-Type: application/json" \
+                    -d "${PAYLOAD}" \
+                    --max-time 30 \
+                    --connect-timeout 5)
+
+                  echo "Warm-up HTTP status: ${HTTP_CODE}"
+                  # Salida exitosa siempre — el objetivo es mantener caliente,
+                  # no fallar el Job si vLLM está temporalmente no disponible.
+                  exit 0
+              env:
+                - name: VLLM_MODEL
+                  valueFrom:
+                    configMapKeyRef:
+                      name: vllm-config
+                      key: model_name
+                      optional: true
+              resources:
+                requests:
+                  cpu: "10m"
+                  memory: "16Mi"
+                limits:
+                  cpu: "50m"
+                  memory: "32Mi"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 65534
+                capabilities:
+                  drop: ["ALL"]

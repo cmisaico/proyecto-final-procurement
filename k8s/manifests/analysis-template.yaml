@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: success-rate
+  namespace: ai-platform
+spec:
+  args:
+  - name: service-name
+  - name: namespace
+    value: ai-platform
+  metrics:
+  - name: success-rate
+    interval: 60s
+    count: 5
+    successCondition: result[0] >= 0.95
+    failureLimit: 2
+    provider:
+      prometheus:
+        address: http://kube-prometheus-stack-prometheus.monitoring.svc.cluster.local:9090
+        query: |-
+          sum(rate(procurement_http_requests_total{status!~"5.."}[5m])) / sum(rate(procurement_http_requests_total[5m])) or vector(1)

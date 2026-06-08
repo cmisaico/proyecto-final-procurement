@@ -62,8 +62,8 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="px-5 py-4 border-t border-[#2a3347]">
-        <p className="text-xs text-slate-500">Fase 4 · Kubernetes</p>
-        <p className="text-xs text-slate-600">Qwen2.5:7b + RTX 5080</p>
+        <p className="text-xs text-slate-500">Procurement</p>
+        <p className="text-xs text-slate-600">Qwen2.5:7b</p>
       </div>
     </aside>
   );

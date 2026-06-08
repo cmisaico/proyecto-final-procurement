@@ -78,6 +78,25 @@ spec:
             {{- if .Values.model.trustRemoteCode }}
             - "--trust-remote-code"
             {{- end }}
+            {{- if .Values.model.maxNumSeqs }}
+            - "--max-num-seqs"
+            - {{ .Values.model.maxNumSeqs | quote }}
+            {{- end }}
+            {{- if .Values.model.enableChunkedPrefill }}
+            - "--enable-chunked-prefill"
+            {{- end }}
+            {{- if .Values.speculative.enabled }}
+            - "--speculative-model"
+            - {{ .Values.speculative.draftModel | quote }}
+            - "--num-speculative-tokens"
+            - {{ .Values.speculative.numSpeculativeTokens | quote }}
+            {{- if eq .Values.speculative.draftModel "[ngram]" }}
+            - "--ngram-prompt-lookup-min"
+            - {{ .Values.speculative.ngramPromptLookupMin | quote }}
+            - "--ngram-prompt-lookup-max"
+            - {{ .Values.speculative.ngramPromptLookupMax | quote }}
+            {{- end }}
+            {{- end }}
 
           ports:
             - name: http

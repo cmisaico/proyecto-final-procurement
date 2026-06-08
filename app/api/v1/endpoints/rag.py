@@ -5,6 +5,9 @@ from pydantic import BaseModel
 
 from app.core.exceptions import AppException
 from app.rag.pipeline import RAGPipeline
+from app.services.guardrail_service import GuardrailService
+
+_guardrail = GuardrailService()
 
 router = APIRouter(prefix="/rag", tags=["rag"])
 
@@ -27,10 +30,16 @@ class QueryResponse(BaseModel):
     answer: str
     question: str
     sources: List[SourceItem]
+    route: Optional[str] = None        # "small" | "large"
+    route_reason: Optional[str] = None
 
 
 @router.post("/query", response_model=QueryResponse)
 async def query_rag(body: QueryRequest):
+    input_check = _guardrail.validate_input(body.question)
+    if not input_check.passed:
+        raise HTTPException(status_code=400, detail=input_check.message)
+
     pipeline = RAGPipeline()
     try:
         result = await pipeline.query(
@@ -46,4 +55,6 @@ async def query_rag(body: QueryRequest):
         answer=result["answer"],
         question=result["question"],
         sources=[SourceItem(**s) for s in result["sources"]],
+        route=result.get("route"),
+        route_reason=result.get("route_reason"),
     )

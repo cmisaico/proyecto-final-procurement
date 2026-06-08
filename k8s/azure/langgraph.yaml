@@ -38,7 +38,7 @@ config:
   EMBEDDINGS_BASE_URL: "http://embeddings.ai-platform.svc.cluster.local:8080/v1"
   QDRANT_HOST: "qdrant.ai-platform.svc.cluster.local"
   QDRANT_PORT: "6333"
-  AZURE_STORAGE_ACCOUNT: "stprocurementazdev"
+  AZURE_STORAGE_ACCOUNT: "stprocurementazadev"
   AZURE_STORAGE_CONTAINER: "licitaciones"
   CONTEXT_TOP_K: "10"
   MAX_CONTEXT_TOKENS: "4000"

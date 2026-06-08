@@ -96,8 +96,8 @@ data:
               "legendFormat": "P50"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(procurement_llm_inference_seconds_bucket[5m])) by (le))",
-              "legendFormat": "P95"
+              "expr": "histogram_quantile(0.90, sum(rate(procurement_llm_inference_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P90"
             },
             {
               "expr": "histogram_quantile(0.99, sum(rate(procurement_llm_inference_seconds_bucket[5m])) by (le))",
@@ -110,15 +110,21 @@ data:
         {
           "id": 7,
           "type": "timeseries",
-          "title": "Inference Throughput (tokens/sec)",
+          "title": "Inference Throughput per Pod (tokens/sec)",
           "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "" },
-          "targets": [{
-            "expr": "avg(procurement_llm_tokens_per_second)",
-            "legendFormat": "tokens/sec"
-          }],
-          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 20 } } },
-          "options": { "tooltip": { "mode": "multi" } }
+          "targets": [
+            {
+              "expr": "procurement_llm_tokens_per_second",
+              "legendFormat": "{{"{{"}} pod {{"}}"}}"
+            },
+            {
+              "expr": "avg(procurement_llm_tokens_per_second)",
+              "legendFormat": "avg"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "lineWidth": 2, "fillOpacity": 10 } } },
+          "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "table", "placement": "bottom" } }
         },
         {
           "id": 8,
@@ -155,15 +161,21 @@ data:
         {
           "id": 10,
           "type": "stat",
-          "title": "Estimated Cost (USD)",
+          "title": "Estimated Cost per Hour (USD/hr)",
           "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
           "datasource": { "type": "prometheus", "uid": "" },
-          "targets": [{
-            "expr": "sum(procurement_cost_estimated_usd)",
-            "legendFormat": "USD"
-          }],
+          "targets": [
+            {
+              "expr": "sum(rate(procurement_cost_estimated_usd[1h])) * 3600",
+              "legendFormat": "LLM tokens cost/hr"
+            },
+            {
+              "expr": "0.158",
+              "legendFormat": "T4 Spot node/hr ($0.158)"
+            }
+          ],
           "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
-          "fieldConfig": { "defaults": { "unit": "currencyUSD", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "red", "value": 100 }] } } }
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 1 }] } } }
         }
       ]
     }

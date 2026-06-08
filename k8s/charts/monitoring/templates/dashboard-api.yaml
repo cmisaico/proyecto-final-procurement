@@ -96,8 +96,8 @@ data:
               "legendFormat": "P50"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(procurement_http_request_duration_seconds_bucket[5m])) by (le))",
-              "legendFormat": "P95"
+              "expr": "histogram_quantile(0.90, sum(rate(procurement_http_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P90"
             },
             {
               "expr": "histogram_quantile(0.99, sum(rate(procurement_http_request_duration_seconds_bucket[5m])) by (le))",

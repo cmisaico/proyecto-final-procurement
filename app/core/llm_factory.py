@@ -14,12 +14,14 @@ from app.core.config import settings
 
 @lru_cache(maxsize=1)
 def get_llm(temperature: float = 0.1, max_tokens: int = 2048) -> ChatOpenAI:
+    from app.core.agent_metrics import prometheus_llm_callback
     return ChatOpenAI(
         base_url=settings.VLLM_BASE_URL,
         api_key=settings.VLLM_API_KEY,
         model=settings.VLLM_MODEL,
         temperature=temperature,
         max_tokens=max_tokens,
+        callbacks=[prometheus_llm_callback],
     )
 
 
@@ -30,4 +32,5 @@ def get_embeddings() -> OpenAIEmbeddings:
         api_key=settings.VLLM_API_KEY,
         model=settings.EMBEDDINGS_MODEL,
         check_embedding_ctx_length=False,
+        chunk_size=32,
     )

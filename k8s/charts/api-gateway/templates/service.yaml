@@ -8,9 +8,13 @@ metadata:
 spec:
   type: {{ .Values.service.type }}
   selector:
-    {{- include "api-gateway.selectorLabels" . | nindent 4 }}
+    app: api-gateway
   ports:
     - name: http
       protocol: TCP
       port: {{ .Values.service.port }}
+      targetPort: http
+    - name: metrics
+      protocol: TCP
+      port: 9090
       targetPort: http

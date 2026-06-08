@@ -1,23 +1,24 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: ollama
+  name: vllm
   namespace: monitoring
   labels:
-    app: ollama
+    app: vllm
     release: prometheus
     {{- include "monitoring.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      app.kubernetes.io/name: ollama
+      app.kubernetes.io/name: vllm
   namespaceSelector:
     matchNames:
       - ai-platform
   endpoints:
+    # vLLM expone /metrics en el mismo puerto HTTP (8000)
     - port: http
       path: /metrics
-      interval: 30s
+      interval: 15s
       scrapeTimeout: 10s
       scheme: http
       relabelings:
@@ -29,3 +30,57 @@ spec:
           targetLabel: service
         - sourceLabels: [__meta_kubernetes_pod_node_name]
           targetLabel: node
+      metricRelabelings:
+        # Retener solo métricas vLLM relevantes para reducir cardinalidad.
+        # vLLM expone >150 series; filtramos a las que alimentan dashboards y alertas.
+        - sourceLabels: [__name__]
+          regex: >-
+            (vllm:generation_tokens_total|vllm:num_requests_running|
+            vllm:num_requests_waiting|vllm:num_preemptions_total|
+            vllm:gpu_cache_usage_perc|vllm:cpu_cache_usage_perc|
+            vllm:time_to_first_token_seconds.*|vllm:time_per_output_token_seconds.*|
+            vllm:request_success_total|vllm:request_prompt_tokens.*|
+            vllm:request_generation_tokens.*|vllm:spec_decode_draft_acceptance_rate|
+            vllm:cache_config_info|process_resident_memory_bytes)
+          action: keep
+---
+# PodMonitor para DCGM Exporter (GPU Operator instala el DaemonSet en kube-system
+# o en el namespace gpu-operator). El ServiceMonitor estándar del GPU Operator
+# puede fallar si el release label del kube-prometheus-stack es distinto.
+# Este PodMonitor lo recoge explícitamente.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: dcgm-exporter
+  namespace: monitoring
+  labels:
+    app: dcgm-exporter
+    release: prometheus
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: nvidia-dcgm-exporter
+  namespaceSelector:
+    any: true
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod
+      metricRelabelings:
+        # Solo métricas DCGM usadas en dashboards y alertas
+        - sourceLabels: [__name__]
+          regex: >-
+            (DCGM_FI_DEV_GPU_UTIL|DCGM_FI_DEV_FB_USED|DCGM_FI_DEV_FB_FREE|
+            DCGM_FI_DEV_FB_TOTAL|DCGM_FI_DEV_POWER_USAGE|DCGM_FI_DEV_POWER_LIMIT|
+            DCGM_FI_DEV_GPU_TEMP|DCGM_FI_DEV_SM_CLOCK|DCGM_FI_DEV_MEM_CLOCK|
+            DCGM_FI_DEV_PCIE_TX_BYTES|DCGM_FI_DEV_PCIE_RX_BYTES)
+          action: keep

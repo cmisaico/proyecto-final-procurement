@@ -167,6 +167,95 @@ data:
           }],
           "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "lineWidth": 2 } }, "overrides": [{ "matcher": { "id": "byName", "options": "GPU Temp °C" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] }] },
           "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 12,
+          "type": "stat",
+          "title": "Pod Restarts (last 15m)",
+          "description": "Contenedores con reinicios recientes. >3 en 15 min dispara la alerta PodCrashLooping.",
+          "gridPos": { "x": 0, "y": 26, "w": 6, "h": 4 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=\"ai-platform\"}[15m]))",
+            "legendFormat": "Restarts"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 0,
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "green",  "value": null },
+                  { "color": "yellow", "value": 1    },
+                  { "color": "red",    "value": 3    }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 13,
+          "type": "timeseries",
+          "title": "Pod Restart Count by Container",
+          "description": "Contador acumulado de reinicios por contenedor. Una pendiente abrupta indica CrashLoopBackOff.",
+          "gridPos": { "x": 6, "y": 26, "w": 18, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "kube_pod_container_status_restarts_total{namespace=\"ai-platform\"}",
+            "legendFormat": "{{"{{"}} pod {{"}}"}} / {{"{{"}} container {{"}}"}}"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "custom": { "lineWidth": 2, "fillOpacity": 5 }
+            }
+          },
+          "options": {
+            "tooltip": { "mode": "multi" },
+            "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] }
+          }
+        },
+        {
+          "id": 14,
+          "type": "table",
+          "title": "Container Restart Summary",
+          "description": "Vista tabular de reinicios. Filtra por containers con al menos 1 reinicio.",
+          "gridPos": { "x": 0, "y": 30, "w": 12, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "kube_pod_container_status_restarts_total{namespace=\"ai-platform\"} > 0",
+            "legendFormat": "{{"{{"}} pod {{"}}"}} — {{"{{"}} container {{"}}"}}",
+            "instant": true,
+            "format": "table"
+          }],
+          "options": {
+            "footer": { "show": false },
+            "showHeader": true,
+            "cellHeight": "sm",
+            "sortBy": [{ "displayName": "Value", "desc": true }]
+          },
+          "transformations": [
+            { "id": "organize", "options": {
+              "excludeByName": { "Time": true, "__name__": true, "job": true, "instance": true },
+              "renameByName": { "Value": "Total Restarts", "pod": "Pod", "container": "Container", "namespace": "Namespace" }
+            }}
+          ],
+          "fieldConfig": {
+            "overrides": [{
+              "matcher": { "id": "byName", "options": "Total Restarts" },
+              "properties": [
+                { "id": "custom.displayMode", "value": "color-background" },
+                { "id": "color", "value": { "mode": "thresholds" } },
+                { "id": "thresholds", "value": { "steps": [
+                  { "color": "yellow", "value": null },
+                  { "color": "orange", "value": 3 },
+                  { "color": "red",    "value": 10 }
+                ]}}
+              ]
+            }]
+          }
         }
       ]
     }

@@ -72,7 +72,7 @@ async def readiness():
     try:
         import httpx
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+            r = await client.get(f"{settings.VLLM_BASE_URL}/models")
             checks["ollama"] = "ok" if r.status_code == 200 else f"http_{r.status_code}"
     except Exception as e:
         checks["ollama"] = f"error: {str(e)[:80]}"
@@ -93,7 +93,7 @@ async def status():
         ("postgres", _check_postgres),
         ("qdrant",   _check_qdrant),
         ("storage",  _check_storage),
-        ("ollama",   _check_ollama),
+        ("vllm",     _check_ollama),
     ]:
         t0 = time.perf_counter()
         try:
@@ -107,8 +107,8 @@ async def status():
         status="healthy" if all_ok else "degraded",
         version=settings.APP_VERSION,
         services=checks,
-        llm_model=settings.OLLAMA_LLM_MODEL,
-        embed_model=settings.OLLAMA_EMBED_MODEL,
+        llm_model=settings.VLLM_MODEL,
+        embed_model=settings.EMBEDDINGS_MODEL,
         context_top_k=settings.CONTEXT_TOP_K,
         max_context_tokens=settings.MAX_CONTEXT_TOKENS,
         guardrail_threshold=settings.GUARDRAIL_THRESHOLD,
@@ -147,5 +147,5 @@ async def _check_storage() -> bool:
 async def _check_ollama() -> bool:
     import httpx
     async with httpx.AsyncClient(timeout=5.0) as client:
-        r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+        r = await client.get(f"{settings.VLLM_BASE_URL}/models")
         return r.status_code == 200

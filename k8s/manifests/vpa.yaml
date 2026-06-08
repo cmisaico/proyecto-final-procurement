@@ -1,0 +1,69 @@
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: api-gateway-vpa
+  namespace: ai-platform
+spec:
+  targetRef:
+    apiVersion: argoproj.io/v1alpha1
+    kind: Rollout
+    name: api-gateway
+  updatePolicy:
+    updateMode: Auto
+  resourcePolicy:
+    containerPolicies:
+    - containerName: api-gateway
+      minAllowed:
+        cpu: 100m
+        memory: 256Mi
+      maxAllowed:
+        cpu: 2000m
+        memory: 4Gi
+      controlledResources: ["cpu", "memory"]
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: langgraph-vpa
+  namespace: ai-platform
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: langgraph
+  updatePolicy:
+    updateMode: Auto
+  resourcePolicy:
+    containerPolicies:
+    - containerName: langgraph
+      minAllowed:
+        cpu: 200m
+        memory: 512Mi
+      maxAllowed:
+        cpu: 4000m
+        memory: 8Gi
+      controlledResources: ["cpu", "memory"]
+---
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: qdrant-vpa
+  namespace: ai-platform
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: StatefulSet
+    name: qdrant
+  updatePolicy:
+    updateMode: "Off"
+  resourcePolicy:
+    containerPolicies:
+    - containerName: qdrant
+      minAllowed:
+        cpu: 500m
+        memory: 1Gi
+      maxAllowed:
+        cpu: 8000m
+        memory: 32Gi
+      controlledResources: ["cpu", "memory"]

@@ -1,0 +1,297 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-gpu-cost
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+    {{- include "monitoring.labels" . | nindent 4 }}
+data:
+  gpu-cost.json: |-
+    {
+      "id": null,
+      "uid": "gpu-cost",
+      "title": "GPU Power & Cost Efficiency",
+      "tags": ["procurement", "gpu", "cost", "power"],
+      "timezone": "browser",
+      "schemaVersion": 38,
+      "version": 1,
+      "refresh": "30s",
+      "time": { "from": "now-1h", "to": "now" },
+      "templating": {
+        "list": [
+          {
+            "name": "gpu_type",
+            "label": "GPU Type",
+            "type": "custom",
+            "current": { "text": "T4 Spot", "value": "t4_spot" },
+            "options": [
+              { "text": "T4 Spot ($0.158/hr)",    "value": "t4_spot"    },
+              { "text": "T4 On-Demand ($0.526/hr)","value": "t4_ondemand"},
+              { "text": "A10G ($1.354/hr)",         "value": "a10g"       },
+              { "text": "L4 ($0.706/hr)",           "value": "l4"         },
+              { "text": "L40S ($2.50/hr)",          "value": "l40s"       }
+            ]
+          }
+        ]
+      },
+      "panels": [
+        {
+          "id": 1,
+          "type": "gauge",
+          "title": "GPU Power Usage (W)",
+          "description": "Consumo instantáneo de la GPU. TDP: T4=70W, A10G=150W, L4=72W, L40S=350W",
+          "gridPos": { "x": 0, "y": 0, "w": 6, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "DCGM_FI_DEV_POWER_USAGE",
+            "legendFormat": "GPU {{"{{"}} gpu {{"}}"}} Power (W)"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "min": 0,
+              "max": 400,
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "green",  "value": null },
+                  { "color": "yellow", "value": 120  },
+                  { "color": "orange", "value": 200  },
+                  { "color": "red",    "value": 320  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "Power Limit (W)",
+          "gridPos": { "x": 6, "y": 0, "w": 4, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "DCGM_FI_DEV_POWER_LIMIT",
+            "legendFormat": "Limit"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "unit": "watt" } }
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "Power Utilization %",
+          "description": "Porcentaje del TDP consumido. >90% puede causar throttling térmico.",
+          "gridPos": { "x": 10, "y": 0, "w": 4, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "DCGM_FI_DEV_POWER_USAGE / DCGM_FI_DEV_POWER_LIMIT * 100",
+            "legendFormat": "Power %"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "green",  "value": null },
+                  { "color": "yellow", "value": 75   },
+                  { "color": "red",    "value": 92   }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Power Efficiency (Tokens/W)",
+          "description": "Tokens generados por Watt consumido. Mayor = más eficiente.",
+          "gridPos": { "x": 14, "y": 0, "w": 5, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "sum(rate(vllm:generation_tokens_total[1m])) / clamp_min(avg(DCGM_FI_DEV_POWER_USAGE), 1)",
+            "legendFormat": "Tokens/W"
+          }],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 } }
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Cost per 1K Tokens (USD)",
+          "description": "Costo estimado por 1000 tokens generados. Selecciona el tipo de GPU arriba.",
+          "gridPos": { "x": 19, "y": 0, "w": 5, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [
+            {
+              "expr": "(0.158 / 3600) / clamp_min(sum(rate(vllm:generation_tokens_total[1m])) / 1000, 0.001)",
+              "legendFormat": "T4 Spot $/1K tok",
+              "hide": false
+            },
+            {
+              "expr": "(0.526 / 3600) / clamp_min(sum(rate(vllm:generation_tokens_total[1m])) / 1000, 0.001)",
+              "legendFormat": "T4 On-Demand $/1K tok",
+              "hide": false
+            },
+            {
+              "expr": "(1.354 / 3600) / clamp_min(sum(rate(vllm:generation_tokens_total[1m])) / 1000, 0.001)",
+              "legendFormat": "A10G $/1K tok",
+              "hide": false
+            },
+            {
+              "expr": "(0.706 / 3600) / clamp_min(sum(rate(vllm:generation_tokens_total[1m])) / 1000, 0.001)",
+              "legendFormat": "L4 $/1K tok",
+              "hide": false
+            }
+          ],
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+          "fieldConfig": { "defaults": { "unit": "currencyUSD", "decimals": 4 } }
+        },
+        {
+          "id": 6,
+          "type": "timeseries",
+          "title": "GPU Power Usage Over Time (W)",
+          "gridPos": { "x": 0, "y": 6, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [
+            {
+              "expr": "DCGM_FI_DEV_POWER_USAGE",
+              "legendFormat": "Power Usage (W)"
+            },
+            {
+              "expr": "DCGM_FI_DEV_POWER_LIMIT",
+              "legendFormat": "Power Limit (W)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "watt",
+              "custom": { "lineWidth": 2, "fillOpacity": 10 }
+            },
+            "overrides": [{
+              "matcher": { "id": "byName", "options": "Power Limit (W)" },
+              "properties": [
+                { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [8, 4] } },
+                { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }
+              ]
+            }]
+          },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 7,
+          "type": "timeseries",
+          "title": "Cost per 1K Tokens — Comparativa GPU (USD)",
+          "description": "A menor costo, mayor eficiencia económica. L4 domina el ratio costo/throughput.",
+          "gridPos": { "x": 12, "y": 6, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [
+            {
+              "expr": "(0.158 / 3600) / clamp_min(sum(rate(vllm:generation_tokens_total[1m])) / 1000, 0.001)",
+              "legendFormat": "T4 Spot ($0.158/hr)"
+            },
+            {
+              "expr": "(0.526 / 3600) / clamp_min(sum(rate(vllm:generation_tokens_total[1m])) / 1000, 0.001)",
+              "legendFormat": "T4 On-Demand ($0.526/hr)"
+            },
+            {
+              "expr": "(1.354 / 3600) / clamp_min(sum(rate(vllm:generation_tokens_total[1m])) / 1000, 0.001)",
+              "legendFormat": "A10G ($1.354/hr)"
+            },
+            {
+              "expr": "(0.706 / 3600) / clamp_min(sum(rate(vllm:generation_tokens_total[1m])) / 1000, 0.001)",
+              "legendFormat": "L4 ($0.706/hr)"
+            },
+            {
+              "expr": "(2.50 / 3600) / clamp_min(sum(rate(vllm:generation_tokens_total[1m])) / 1000, 0.001)",
+              "legendFormat": "L40S ($2.50/hr)"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 4,
+              "custom": { "lineWidth": 2 }
+            }
+          },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 8,
+          "type": "timeseries",
+          "title": "Tokens/Watt (Eficiencia energética)",
+          "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [{
+            "expr": "sum(rate(vllm:generation_tokens_total[1m])) / clamp_min(avg(DCGM_FI_DEV_POWER_USAGE), 1)",
+            "legendFormat": "Tokens/W"
+          }],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "short",
+              "decimals": 2,
+              "custom": { "lineWidth": 2, "fillOpacity": 15 }
+            }
+          },
+          "options": { "tooltip": { "mode": "multi" } }
+        },
+        {
+          "id": 9,
+          "type": "table",
+          "title": "GPU Comparison: Cost & Performance Reference",
+          "description": "Tabla de referencia estática. Los valores de Tokens/s son estimaciones basadas en Qwen2.5-7B AWQ batch=16.",
+          "gridPos": { "x": 12, "y": 14, "w": 12, "h": 8 },
+          "datasource": { "type": "-- Mixed --" },
+          "targets": [],
+          "options": {
+            "footer": { "show": false },
+            "showHeader": true,
+            "cellHeight": "sm"
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {}
+            }
+          ],
+          "fieldConfig": { "defaults": {}, "overrides": [] },
+          "type": "table",
+          "pluginVersion": "10.0.0",
+          "description": "GPU | VRAM | Price/hr | Est. tok/s | $/1K tok | TDP | Notes\nT4 Spot | 16 GB | $0.158 | ~80 | $0.00055 | 70W | Academic/dev\nT4 On-Demand | 16 GB | $0.526 | ~80 | $0.0018 | 70W | -\nL4 | 24 GB | $0.706 | ~210 | $0.00093 | 72W | Best cost/perf\nA10G | 24 GB | $1.354 | ~200 | $0.0019 | 150W | Azure prod\nL40S | 48 GB | $2.50 | ~350 | $0.0020 | 350W | 14B FP16"
+        },
+        {
+          "id": 10,
+          "type": "timeseries",
+          "title": "Accumulated GPU Cost (USD) — Session",
+          "description": "Costo acumulado desde el inicio de la ventana de tiempo seleccionada.",
+          "gridPos": { "x": 0, "y": 22, "w": 24, "h": 6 },
+          "datasource": { "type": "prometheus", "uid": "" },
+          "targets": [
+            {
+              "expr": "sum(increase(vllm:generation_tokens_total[$__range])) / 1000 * (0.158 / 3600) * $__range_s",
+              "legendFormat": "T4 Spot acumulado"
+            },
+            {
+              "expr": "sum(increase(vllm:generation_tokens_total[$__range])) / 1000 * (1.354 / 3600) * $__range_s",
+              "legendFormat": "A10G acumulado"
+            },
+            {
+              "expr": "sum(increase(vllm:generation_tokens_total[$__range])) / 1000 * (0.706 / 3600) * $__range_s",
+              "legendFormat": "L4 acumulado"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "custom": { "lineWidth": 2, "fillOpacity": 20 }
+            }
+          },
+          "options": { "tooltip": { "mode": "multi" } }
+        }
+      ]
+    }

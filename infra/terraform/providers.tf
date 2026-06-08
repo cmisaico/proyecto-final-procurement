@@ -18,11 +18,9 @@ terraform {
 
   backend "azurerm" {
     resource_group_name  = "rg-procurement-tfstate"
-    storage_account_name = "stprocurementtfstate"
+    storage_account_name = "stprocurementaztfstate"
     container_name       = "tfstate"
     key                  = "procurement.prod.tfstate"
-    subscription_id = "29fd6d9d-066c-43ca-86c4-f4cb1ba371fe"
-    tenant_id       = "1a23be34-0a83-4777-8c0d-5b2b24640a65"
   }
 }
 
@@ -36,8 +34,6 @@ provider "azurerm" {
       prevent_deletion_if_contains_resources = false
     }
   }
-  subscription_id = "29fd6d9d-066c-43ca-86c4-f4cb1ba371fe"
-  tenant_id       = "1a23be34-0a83-4777-8c0d-5b2b24640a65"
 }
 
 provider "azuread" {}

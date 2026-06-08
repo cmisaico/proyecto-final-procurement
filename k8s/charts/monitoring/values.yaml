@@ -61,19 +61,15 @@ kube-prometheus-stack:
         serve_from_sub_path: false
       auth.anonymous:
         enabled: false
-    datasources:
-      datasources.yaml:
-        apiVersion: 1
-        datasources:
-          - name: Prometheus
-            type: prometheus
-            url: http://prometheus-kube-prometheus-prometheus:9090
-            access: proxy
-            isDefault: false
-          - name: Loki
-            type: loki
-            url: http://loki:3100
-            access: proxy
+    # kube-prometheus-stack ya crea el datasource de Prometheus como default.
+    # Solo agregamos Loki como datasource adicional para evitar el error
+    # "Only one datasource per organization can be marked as default".
+    additionalDataSources:
+      - name: Loki
+        type: loki
+        url: http://loki:3100
+        access: proxy
+        isDefault: false
     dashboardProviders:
       dashboardproviders.yaml:
         apiVersion: 1
@@ -161,7 +157,7 @@ kube-prometheus-stack:
           - ai-platform
       endpoints:
         - port: metrics
-          path: /api/v1/metrics
+          path: /metrics
           interval: 10s
           scrapeTimeout: 8s
     - name: ai-platform-vllm

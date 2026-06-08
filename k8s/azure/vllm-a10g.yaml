@@ -1,0 +1,90 @@
+# vLLM overlay para NVIDIA A10G / A10 (24 GB VRAM, Arquitectura Ampere)
+#
+# Plataforma: Azure Standard_NV6ads_A10_v5 (6 vCPU, 55 GB RAM, 1× A10 24 GB)
+#             AWS g5.xlarge (A10G en EKS)
+#
+# A10G vs T4:
+#   - 1.5× más VRAM (24 vs 16 GB)
+#   - ~1.8× más bandwidth (~600 vs ~320 GB/s)
+#   - 150 W TDP vs 70 W — mayor consumo pero más throughput por watt neto
+#   - Ampere Tensor Cores: mejor rendimiento en FP16/BF16
+#   - Precio Azure: ~$1.354/hr (8.5× T4 Spot, 2.6× T4 On-Demand)
+#
+# Modelo recomendado: Qwen/Qwen2.5-7B-Instruct (FP16, ~14.5 GB)
+# Alternativa 14B:    Qwen/Qwen2.5-14B-Instruct-AWQ (4-bit, ~8 GB)
+#
+# Despliegue:
+#   helm upgrade vllm k8s/charts/vllm -n ai-platform -f k8s/azure/vllm-a10g.yaml
+
+image:
+  repository: acrprocurementazdev.azurecr.io/vllm-openai
+  tag: "v0.8.5.post1"
+  pullPolicy: IfNotPresent
+
+model:
+  name: Qwen/Qwen2.5-7B-Instruct
+  servedModelName: qwen2.5-7b
+  gpuMemoryUtilization: "0.90"
+  maxModelLen: 16384
+  maxNumBatchedTokens: 16384
+  quantization: ""
+  dtype: bfloat16
+  trustRemoteCode: true
+  maxNumSeqs: 512
+  enableChunkedPrefill: true
+
+resources:
+  requests:
+    memory: "20Gi"
+    cpu: "4"
+    nvidia.com/gpu: "1"
+  limits:
+    memory: "28Gi"
+    cpu: "6"
+    nvidia.com/gpu: "1"
+
+nodeSelector:
+  kubernetes.io/os: linux
+  nodepool: gpu
+  hardware: nvidia-a10g
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: vllm
+          topologyKey: kubernetes.io/hostname
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 180
+  periodSeconds: 20
+  timeoutSeconds: 10
+  failureThreshold: 5
+  successThreshold: 1
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 360
+  periodSeconds: 60
+  timeoutSeconds: 15
+  failureThreshold: 3
+
+speculative:
+  enabled: true
+  draftModel: "[ngram]"
+  numSpeculativeTokens: 5
+  ngramPromptLookupMin: 4
+  ngramPromptLookupMax: 8

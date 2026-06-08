@@ -51,11 +51,15 @@ podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
   fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
 
 # Container-level security context
 containerSecurityContext:
   allowPrivilegeEscalation: false
   readOnlyRootFilesystem: false   # sentence-transformers writes to ~/.cache
+  capabilities:
+    drop: ["ALL"]
 
 # Additional environment variables injected into the container
 extraEnv: []

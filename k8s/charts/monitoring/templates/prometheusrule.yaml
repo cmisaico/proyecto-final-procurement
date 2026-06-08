@@ -121,6 +121,106 @@ spec:
             runbook_url: "https://wiki.internal/runbooks/gpu-memory-high"
             dashboard_url: "http://grafana/d/procurement-gpu/gpu-performance"
 
+        # GPU power near thermal limit — riesgo de throttling
+        - alert: GPUPowerNearLimit
+          expr: |
+            (
+              DCGM_FI_DEV_POWER_USAGE
+              /
+              DCGM_FI_DEV_POWER_LIMIT
+            ) > 0.92
+          for: 5m
+          labels:
+            severity: warning
+            team: ml-infra
+          annotations:
+            summary: "GPU power consumption near thermal limit"
+            description: >-
+              GPU {{"{{"}} $labels.gpu {{"}}"}} en el nodo {{"{{"}} $labels.node {{"}}"}} está
+              consumiendo {{"{{"}} $value | humanizePercentage {{"}}"}} de su TDP.
+              Puede producirse throttling térmico que degrade el throughput de tokens.
+            runbook_url: "https://wiki.internal/runbooks/gpu-power-limit"
+
+        # GPU sin carga pero nodo activo — costo desperdiciado
+        - alert: GPUIdleWithCost
+          expr: |
+            DCGM_FI_DEV_GPU_UTIL < 5
+          for: 30m
+          labels:
+            severity: info
+            team: ml-infra
+          annotations:
+            summary: "GPU node idle for 30+ minutes"
+            description: >-
+              GPU {{"{{"}} $labels.gpu {{"}}"}} en {{"{{"}} $labels.node {{"}}"}} tiene utilización
+              de {{"{{"}} $value {{"}}"}}% durante 30 minutos. Si no hay carga prevista,
+              considera escalar a 0 el node pool para reducir costos.
+            runbook_url: "https://wiki.internal/runbooks/gpu-idle"
+
+    # ------------------------------------------------------------------
+    # Kubernetes Pod health alerts
+    # ------------------------------------------------------------------
+    - name: pod.rules
+      interval: 30s
+      rules:
+        # Reinicio repetido: más de 3 reinicios en 15 minutos → CrashLoopBackOff
+        # Se usa increase() sobre el contador de reinicios de kube-state-metrics.
+        # Umbral conservador: 3 reinicios en 15 min evita falsos positivos por
+        # reinicios de deployment rolling update (que generan 1-2 reinicios normales).
+        - alert: PodCrashLooping
+          expr: |
+            increase(
+              kube_pod_container_status_restarts_total{
+                namespace="ai-platform"
+              }[15m]
+            ) > 3
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+            namespace: ai-platform
+          annotations:
+            summary: "Pod restarting repeatedly (CrashLoopBackOff)"
+            description: >-
+              El contenedor {{"{{"}} $labels.container {{"}}"}} en el pod
+              {{"{{"}} $labels.pod {{"}}"}} (namespace {{"{{"}} $labels.namespace {{"}}"}})
+              ha reiniciado {{"{{"}} $value | printf "%.0f" {{"}}"}} veces en los últimos
+              15 minutos. Revisa los logs del contenedor para identificar la causa
+              (OOM, fallo de readinessProbe, error de inicio del modelo, etc.).
+            runbook_url: "https://wiki.internal/runbooks/pod-crash-loop"
+            dashboard_url: "http://grafana/d/gpu-infra/gpu-infrastructure"
+
+        # Alerta de warning: latencia P99 > 800ms en endpoints no-LLM del api-gateway.
+        # Se excluyen /rag y /agents porque esos endpoints invocan vLLM (3-8s esperados).
+        # Un P99 > 800ms en paths rápidos indica presión de CPU, cold-start del pod,
+        # o red congestionada dentro del cluster.
+        - alert: APILatencyWarning
+          expr: |
+            histogram_quantile(
+              0.99,
+              sum by (le, endpoint) (
+                rate(procurement_http_request_duration_seconds_bucket{
+                  namespace="ai-platform",
+                  endpoint!~".*(rag|agents|generate).*"
+                }[5m])
+              )
+            ) > 0.8
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+            namespace: ai-platform
+          annotations:
+            summary: "API P99 latency exceeds 800ms on fast-path endpoints"
+            description: >-
+              El endpoint {{"{{"}} $labels.endpoint {{"}}"}} del api-gateway tiene una
+              latencia P99 de {{"{{"}} $value | humanizeDuration {{"}}"}} (umbral: 800ms).
+              Este endpoint no involucra LLM: la latencia elevada sugiere presión de
+              CPU/memoria en el pod, conexiones agotadas a la base de datos, o
+              degradación de la red intra-cluster.
+            runbook_url: "https://wiki.internal/runbooks/api-latency-warning"
+            dashboard_url: "http://grafana/d/platform-api/platform-api"
+
     # ------------------------------------------------------------------
     # vLLM alerts
     # ------------------------------------------------------------------

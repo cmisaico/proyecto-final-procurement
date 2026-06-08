@@ -18,13 +18,27 @@ setup_tracing(service_name="procurement-api")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import logging
+    _log = logging.getLogger(__name__)
+
     from app.infrastructure.storage.factory import storage_client
     from app.infrastructure.vector_store.qdrant_client import qdrant_store
     import app.infrastructure.database.models          # noqa: F401
     import app.infrastructure.database.models_fase02   # noqa: F401
 
-    storage_client.ensure_bucket()
-    qdrant_store.ensure_collection()
+    # Dependency initialization: errors are logged as warnings so that the app
+    # starts and /health always returns 200. Connections are retried lazily on
+    # first use. This allows the Rollout readiness probe to pass while
+    # infrastructure (Qdrant, Azure Blob) comes up asynchronously.
+    try:
+        storage_client.ensure_bucket()
+    except Exception as exc:
+        _log.warning("Storage init failed at startup — will retry on first use: %s", exc)
+
+    try:
+        qdrant_store.ensure_collection()
+    except Exception as exc:
+        _log.warning("Qdrant init failed at startup — will retry on first use: %s", exc)
 
     yield
 

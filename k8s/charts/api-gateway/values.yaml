@@ -43,15 +43,18 @@ service:
   port: 8000
 
 # ---- Ingress -----------------------------------------------------------------
+# Deshabilitado: el routing centralizado está en k8s/ingress/ingress-routes.yaml.
+# Tener el Ingress del chart con path "/" captura todo el tráfico incluyendo
+# las rutas del frontend, enviándolas al api-gateway (FastAPI devuelve 404).
 ingress:
-  enabled: true
+  enabled: false
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
   host: procurement.local
-  path: /
+  path: /api
   pathType: Prefix
   tls: []
 
@@ -109,7 +112,8 @@ config:
   POSTGRES_PORT: "5432"
   POSTGRES_DB: "procurement_db"
   POSTGRES_USER: "procurement"
-  VLLM_BASE_URL: "http://ollama.ai-platform.svc.cluster.local:11434/v1"
+  POSTGRES_SSLMODE: "require"
+  VLLM_BASE_URL: "http://vllm.ai-platform.svc.cluster.local:8000/v1"
   VLLM_MODEL: "qwen2.5:7b"
   EMBEDDINGS_BASE_URL: "http://embeddings.ai-platform.svc.cluster.local:8080/v1"
   QDRANT_HOST: "qdrant.ai-platform.svc.cluster.local"
@@ -128,6 +132,6 @@ config:
 # Secret references — actual values live in a Kubernetes Secret.
 # These keys must exist in the secret named <release-name>-secret.
 secrets:
-  postgresPassword: "procurement_pass"
+  postgresPassword: "procureadmin"
   minioAccessKey: "minioadmin"
   minioSecretKey: "minioadmin"

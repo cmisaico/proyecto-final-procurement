@@ -92,6 +92,17 @@ class ProposalGenerationAgent:
             agent_name=self.NAME,
         )
 
+        if not guardrail_result.passed:
+            logger.warning(
+                "ProposalAgent guardrail FAILED — output discarded, using fallback",
+                extra={
+                    "tender_id": tender_id,
+                    "score": guardrail_result.score,
+                    "flagged": guardrail_result.flagged_claims,
+                },
+            )
+            output = self._fallback_output(legal_output)
+
         logger.info(
             "ProposalAgent completed",
             extra={
@@ -99,6 +110,7 @@ class ProposalGenerationAgent:
                 "checklist_items": len(output.get("checklist", [])),
                 "compliance_items": len(output.get("compliance_matrix", [])),
                 "guardrail_score": guardrail_result.score,
+                "guardrail_passed": guardrail_result.passed,
             },
         )
 

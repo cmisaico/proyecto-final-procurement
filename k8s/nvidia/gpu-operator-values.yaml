@@ -1,0 +1,41 @@
+operator:
+  defaultRuntime: containerd
+
+# AKS already pre-installs NVIDIA drivers on GPU nodes — skip driver installation
+driver:
+  enabled: false
+
+toolkit:
+  enabled: true
+
+devicePlugin:
+  enabled: false  # covered by k8s/nvidia/device-plugin.yaml
+
+dcgmExporter:
+  enabled: true
+  serviceMonitor:
+    enabled: true
+    additionalLabels:
+      release: kube-prometheus-stack
+
+nodeStatusExporter:
+  enabled: true
+
+migManager:
+  enabled: false
+
+validator:
+  plugin:
+    env:
+    - name: WITH_WORKLOAD
+      value: "false"
+
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+  - key: kubernetes.azure.com/scalesetpriority
+    operator: Equal
+    value: spot
+    effect: NoSchedule

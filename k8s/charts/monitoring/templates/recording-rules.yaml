@@ -1,0 +1,164 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ai-procurement-cost-recording
+  namespace: monitoring
+  labels:
+    app: ai-procurement-platform
+    release: prometheus
+    {{- include "monitoring.labels" . | nindent 4 }}
+spec:
+  groups:
+    # ------------------------------------------------------------------
+    # Cost per token — pre-computado por GPU type
+    # Fórmula: (precio_hora / 3600) / (tokens_por_segundo / 1000)
+    # El denominador usa clamp_min para evitar división por cero cuando
+    # no hay carga activa (resultado → 0 cuando no hay tokens generados).
+    # ------------------------------------------------------------------
+    - name: cost.recording
+      interval: 60s
+      rules:
+        - record: job:vllm_cost_per_1k_tokens:t4_spot
+          expr: |
+            (0.158 / 3600)
+            /
+            clamp_min(
+              sum(rate(vllm:generation_tokens_total{namespace="ai-platform"}[5m])) / 1000,
+              0.001
+            )
+
+        - record: job:vllm_cost_per_1k_tokens:t4_ondemand
+          expr: |
+            (0.526 / 3600)
+            /
+            clamp_min(
+              sum(rate(vllm:generation_tokens_total{namespace="ai-platform"}[5m])) / 1000,
+              0.001
+            )
+
+        - record: job:vllm_cost_per_1k_tokens:a10g
+          expr: |
+            (1.354 / 3600)
+            /
+            clamp_min(
+              sum(rate(vllm:generation_tokens_total{namespace="ai-platform"}[5m])) / 1000,
+              0.001
+            )
+
+        - record: job:vllm_cost_per_1k_tokens:l4
+          expr: |
+            (0.706 / 3600)
+            /
+            clamp_min(
+              sum(rate(vllm:generation_tokens_total{namespace="ai-platform"}[5m])) / 1000,
+              0.001
+            )
+
+        - record: job:vllm_cost_per_1k_tokens:l40s
+          expr: |
+            (2.50 / 3600)
+            /
+            clamp_min(
+              sum(rate(vllm:generation_tokens_total{namespace="ai-platform"}[5m])) / 1000,
+              0.001
+            )
+
+    # ------------------------------------------------------------------
+    # Eficiencia energética
+    # ------------------------------------------------------------------
+    - name: energy.recording
+      interval: 60s
+      rules:
+        # Tokens generados por Watt consumido (métrica de eficiencia energética)
+        - record: job:vllm_tokens_per_watt
+          expr: |
+            sum(rate(vllm:generation_tokens_total{namespace="ai-platform"}[5m]))
+            /
+            clamp_min(avg(DCGM_FI_DEV_POWER_USAGE), 1)
+
+        # Tokens por dólar — inverso del costo por token, útil para comparativas
+        - record: job:vllm_tokens_per_dollar:t4_spot
+          expr: |
+            clamp_min(
+              sum(rate(vllm:generation_tokens_total{namespace="ai-platform"}[5m])),
+              0
+            )
+            /
+            (0.158 / 3600)
+
+    # ------------------------------------------------------------------
+    # Inference Router — ratio de requests que evitan la GPU (ruta SMALL)
+    # Un valor de 0.3 significa que el 30% de los requests RAG no llaman
+    # al LLM → ahorro directo en GPU time y costo por token.
+    # ------------------------------------------------------------------
+    - name: router.recording
+      interval: 30s
+      rules:
+        # Porcentaje de requests que tomaron la ruta rápida (sin LLM)
+        - record: job:inference_router_small_ratio
+          expr: |
+            rate(procurement_inference_route_total{route="small"}[5m])
+            /
+            clamp_min(
+              sum(rate(procurement_inference_route_total[5m])),
+              0.001
+            )
+
+        # Throughput de requests por ruta (RPM)
+        - record: job:inference_router_rpm_by_route
+          expr: |
+            sum by (route) (
+              rate(procurement_inference_route_total[5m])
+            ) * 60
+
+        # Ahorro estimado en costo GPU por hora (T4 Spot como referencia)
+        # Asume: cada request SMALL evita ~3 segundos de GPU time en promedio
+        # (P50 de latencia LLM para queries simples con Qwen2.5-7B AWQ)
+        - record: job:inference_router_savings_usd_per_hour:t4_spot
+          expr: |
+            rate(procurement_inference_route_total{route="small"}[5m])
+            * 3
+            * (0.158 / 3600)
+            * 3600
+
+    # ------------------------------------------------------------------
+    # Autoscaling cost impact
+    # Mide el costo real de tener nodos GPU activos vs el costo de tokens
+    # procesados — la diferencia es el overhead de capacidad idle.
+    # ------------------------------------------------------------------
+    - name: autoscaling.recording
+      interval: 60s
+      rules:
+        # GPU cache hit ratio: mide eficiencia del KV cache
+        # Un valor < 0.5 indica muchas requests con contextos distintos
+        - record: job:vllm_kv_cache_hit_ratio
+          expr: |
+            sum(rate(vllm:cache_config_info{namespace="ai-platform"}[5m]))
+            or
+            vector(0)
+
+        # Queue depth: requests esperando vs requests activas
+        # Un ratio > 1.5 indica que el modelo está saturado y puede necesitar
+        # scale-out o reducción del batch size
+        - record: job:vllm_queue_depth_ratio
+          expr: |
+            sum(vllm:num_requests_waiting{namespace="ai-platform"})
+            /
+            clamp_min(
+              sum(vllm:num_requests_running{namespace="ai-platform"}),
+              1
+            )
+
+        # GPU utilization promedio (para detectar nodos idle con costo activo)
+        - record: job:dcgm_gpu_utilization_avg
+          expr: avg(DCGM_FI_DEV_GPU_UTIL)
+
+        # VRAM free ratio — alerta temprana de fragmentación o presión de memoria
+        - record: job:dcgm_vram_free_ratio
+          expr: |
+            avg(DCGM_FI_DEV_FB_FREE)
+            /
+            clamp_min(
+              avg(DCGM_FI_DEV_FB_FREE + DCGM_FI_DEV_FB_USED),
+              1
+            )

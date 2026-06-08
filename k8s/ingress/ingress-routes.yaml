@@ -1,5 +1,13 @@
 ---
 # Main ingress for the Procurement Intelligence Platform
+# Fuente única de routing para procurement.local.
+# El Ingress del chart api-gateway está deshabilitado (ingress.enabled: false).
+# El Ingress en frontend.yaml también está eliminado para evitar conflictos.
+#
+# IMPORTANTE — orden de paths en NGINX Ingress:
+#   NGINX usa longest-prefix-match: /api gana sobre / para rutas /api/*.
+#   El frontend (/) debe ir DESPUÉS de las rutas de API para que el catch-all
+#   no interfiera con ellas; NGINX Ingress ordena por especificidad automáticamente.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -11,7 +19,7 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-    # Rate limiting — global
+    # Rate limiting global (rutas /api generales)
     nginx.ingress.kubernetes.io/limit-rps: "50"
     nginx.ingress.kubernetes.io/limit-connections: "20"
     # CORS
@@ -19,11 +27,12 @@ metadata:
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "Content-Type, Authorization"
 spec:
+  ingressClassName: nginx
   rules:
   - host: procurement.local
     http:
       paths:
-      # API Gateway — main application routes
+      # API Gateway — rutas de la plataforma
       - path: /api
         pathType: Prefix
         backend:
@@ -31,7 +40,7 @@ spec:
             name: api-gateway
             port:
               number: 8000
-      # Health / readiness (no rate limiting)
+      # Health / readiness sin rate limiting
       - path: /health
         pathType: Exact
         backend:
@@ -39,6 +48,36 @@ spec:
             name: api-gateway
             port:
               number: 8000
+      # FastAPI docs — deben ir antes del catch-all del frontend
+      - path: /docs
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8000
+      - path: /redoc
+        pathType: Prefix
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8000
+      - path: /openapi.json
+        pathType: Exact
+        backend:
+          service:
+            name: api-gateway
+            port:
+              number: 8000
+      # Frontend — catch-all para la SPA (debe ser el último path)
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80
 ---
 # Monitoring ingress — Grafana
 apiVersion: networking.k8s.io/v1

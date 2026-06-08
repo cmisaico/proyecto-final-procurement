@@ -58,6 +58,8 @@ export interface QueryResponse {
   answer: string;
   question: string;
   sources: SourceItem[];
+  route?: "small" | "large";
+  route_reason?: string;
 }
 
 export interface FullAnalysisResponse {
@@ -126,11 +128,15 @@ export interface CostReport {
   cost_vllm_per_1k_requests_usd: number;
   recommendations: string[];
   breakdown: Record<string, unknown>;
+  prometheus_available: boolean;
 }
 
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   sources?: SourceItem[];
+  route?: "small" | "large";
+  route_reason?: string;
+  blocked?: boolean;
   timestamp: number;
 }

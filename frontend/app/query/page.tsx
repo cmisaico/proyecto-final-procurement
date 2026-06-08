@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, Bot, User, FileSearch, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Send, Bot, User, FileSearch, ChevronDown, ChevronUp, Loader2, ShieldAlert, Zap } from "lucide-react";
 import { api } from "@/lib/api";
 import type { ChatMessage, SourceItem } from "@/lib/types";
 import { Card } from "@/components/Card";
@@ -81,13 +81,18 @@ export default function QueryPage() {
         role: "assistant",
         content: res.answer,
         sources: res.sources,
+        route: res.route,
+        route_reason: res.route_reason,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, botMsg]);
     } catch (e) {
+      const msg = (e as Error).message;
+      const isInjection = msg.toLowerCase().includes("injection") || msg.toLowerCase().includes("detected");
       const errMsg: ChatMessage = {
         role: "assistant",
-        content: `Error: ${(e as Error).message}`,
+        content: isInjection ? msg : `Error: ${msg}`,
+        blocked: isInjection,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, errMsg]);
@@ -145,15 +150,38 @@ export default function QueryPage() {
                 )}
               </div>
               <div className={`max-w-[75%] ${msg.role === "user" ? "items-end" : "items-start"} flex flex-col`}>
+                {/* Guardrail blocked banner */}
+                {msg.blocked && (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 mb-1 bg-red-950 border border-red-700 rounded-lg text-red-400 text-xs font-medium">
+                    <ShieldAlert className="w-3.5 h-3.5 flex-shrink-0" />
+                    Guardrail — Prompt injection blocked
+                  </div>
+                )}
                 <div
                   className={`px-4 py-3 rounded-xl text-sm leading-relaxed ${
                     msg.role === "user"
                       ? "bg-indigo-600 text-white"
+                      : msg.blocked
+                      ? "bg-red-950/40 text-red-300 border border-red-800"
                       : "bg-[#1d2335] text-slate-200"
                   }`}
                 >
                   {renderAnswer(msg.content)}
                 </div>
+                {/* Inference Router route badge */}
+                {msg.route && (
+                  <div
+                    title={msg.route_reason}
+                    className={`flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded text-xs font-mono ${
+                      msg.route === "small"
+                        ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                        : "bg-violet-950 text-violet-400 border border-violet-800"
+                    }`}
+                  >
+                    <Zap className="w-3 h-3" />
+                    {msg.route === "small" ? "router: fast path (no LLM)" : "router: LLM inference"}
+                  </div>
+                )}
                 {msg.sources && <SourcesPanel sources={msg.sources} />}
               </div>
             </div>

@@ -127,6 +127,21 @@ WORKFLOW_RUNS_TOTAL = Counter(
     ["status"],  # status: completed | failed
 )
 
+# ── Inference Router metrics ─────────────────────────────────────────────────
+# Permite medir el % de requests que evitan la GPU (ruta SMALL) y calcular
+# el ahorro en costo por hora derivado del Inference Router Pattern.
+
+INFERENCE_ROUTE_TOTAL = Counter(
+    "procurement_inference_route_total",
+    "Total RAG inference route decisions",
+    ["route"],  # route: small | large
+)
+
+INFERENCE_ROUTE_SAVINGS_USD = Counter(
+    "procurement_inference_route_savings_usd_total",
+    "Estimated cost avoided by taking the fast (no-LLM) path",
+)
+
 # ── Cost metrics ────────────────────────────────────────────────────────────
 
 COST_TOKENS_TOTAL = Counter(

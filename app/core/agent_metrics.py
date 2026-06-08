@@ -3,8 +3,11 @@ Thin metrics wrappers for agent calls.
 Used by supervisor_agent to record per-agent timing and outcomes.
 """
 import time
-from typing import Any, Callable, Dict, Optional
-import tiktoken
+from typing import Any, Dict, List, Optional, Union
+from uuid import UUID
+
+from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.outputs import LLMResult
 
 from app.core.metrics import (
     AGENT_COMPLIANCE_SCORE,
@@ -29,16 +32,53 @@ from app.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-try:
-    _enc = tiktoken.get_encoding("cl100k_base")
-except Exception:
-    _enc = None
+
+class PrometheusLLMCallback(BaseCallbackHandler):
+    """LangChain callback that records token usage and throughput to Prometheus on every LLM call."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._start_times: Dict[str, float] = {}
+
+    def on_llm_start(
+        self, serialized: Dict[str, Any], prompts: List[str], *, run_id: UUID, **kwargs: Any
+    ) -> None:
+        self._start_times[str(run_id)] = time.perf_counter()
+
+    def on_llm_end(self, response: LLMResult, *, run_id: UUID, **kwargs: Any) -> None:
+        duration = time.perf_counter() - self._start_times.pop(str(run_id), time.perf_counter())
+        model = (response.llm_output or {}).get("model_name", settings.VLLM_MODEL)
+        usage = (response.llm_output or {}).get("token_usage", {})
+
+        input_tokens  = usage.get("prompt_tokens", 0)
+        output_tokens = usage.get("completion_tokens", 0)
+
+        if not input_tokens and not output_tokens:
+            # vLLM occasionally omits usage; fall back to character estimate
+            all_text = " ".join(
+                gen.text for gens in response.generations for gen in gens if hasattr(gen, "text")
+            )
+            output_tokens = max(len(all_text) // 4, 1)
+
+        LLM_TOKENS_TOTAL.labels(model=model, token_type="input").inc(input_tokens)
+        LLM_TOKENS_TOTAL.labels(model=model, token_type="output").inc(output_tokens)
+        LLM_INFERENCE_DURATION.labels(model=model, operation="generate").observe(duration)
+        COST_TOKENS_TOTAL.labels(model=model).inc(input_tokens + output_tokens)
+
+        if duration > 0 and output_tokens > 0:
+            LLM_TOKENS_PER_SECOND.labels(model=model).set(output_tokens / duration)
+
+        estimated_cost = (input_tokens + output_tokens) / 1000 * 0.0002
+        COST_ESTIMATED_USD.inc(estimated_cost)
+
+    def on_llm_error(
+        self, error: Union[Exception, KeyboardInterrupt], *, run_id: UUID, **kwargs: Any
+    ) -> None:
+        self._start_times.pop(str(run_id), None)
 
 
-def count_tokens(text: str) -> int:
-    if _enc and text:
-        return len(_enc.encode(text))
-    return len(text) // 4
+# Singleton — one instance shared across all LLM calls
+prometheus_llm_callback = PrometheusLLMCallback()
 
 
 def record_llm_call(
@@ -48,9 +88,9 @@ def record_llm_call(
     model: str = None,
     operation: str = "generate",
 ) -> Dict[str, Any]:
-    model = model or settings.OLLAMA_LLM_MODEL
-    input_tokens = count_tokens(prompt)
-    output_tokens = count_tokens(response)
+    model = model or settings.VLLM_MODEL
+    input_tokens  = max(len(prompt) // 4, 1)
+    output_tokens = max(len(response) // 4, 1)
 
     LLM_TOKENS_TOTAL.labels(model=model, token_type="input").inc(input_tokens)
     LLM_TOKENS_TOTAL.labels(model=model, token_type="output").inc(output_tokens)
@@ -58,13 +98,9 @@ def record_llm_call(
     COST_TOKENS_TOTAL.labels(model=model).inc(input_tokens + output_tokens)
 
     if duration_seconds > 0:
-        tps = output_tokens / duration_seconds
-        LLM_TOKENS_PER_SECOND.labels(model=model).set(tps)
+        LLM_TOKENS_PER_SECOND.labels(model=model).set(output_tokens / duration_seconds)
 
-    # Rough cost estimate: 0 locally, but track for AKS projection
-    # AKS GPU cost: ~$0.0002 per 1K tokens
-    estimated_cost = (input_tokens + output_tokens) / 1000 * 0.0002
-    COST_ESTIMATED_USD.inc(estimated_cost)
+    COST_ESTIMATED_USD.inc((input_tokens + output_tokens) / 1000 * 0.0002)
 
     return {
         "input_tokens": input_tokens,
