@@ -47,11 +47,6 @@ variable "vnet_name" {
   description = "Virtual Network name"
 }
 
-variable "aks_subnet_id" {
-  type        = string
-  description = "AKS nodes subnet ID"
-}
-
 variable "pe_subnet_id" {
   type        = string
   description = "Private Endpoints subnet ID"
@@ -109,17 +104,4 @@ variable "tags" {
   type        = map(string)
   description = "Common tags for all resources"
   default     = {}
-}
-
-# ── AKS ────────────────────────────────────────────────────────────────────────
-variable "aks_cluster_name" {
-  type        = string
-  description = "AKS cluster name"
-  default     = "aks-procurement-dev"
-}
-
-variable "kubernetes_version" {
-  type        = string
-  description = "Kubernetes version for the AKS cluster"
-  default     = "1.29"
 }

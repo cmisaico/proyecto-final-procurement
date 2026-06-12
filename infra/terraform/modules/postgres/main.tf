@@ -49,6 +49,17 @@ resource "azurerm_postgresql_flexible_server_configuration" "log_min_duration" {
   value     = "1000"  # Log queries > 1 segundo
 }
 
+# Acceso público — solo en dev (enable_private_endpoint = false)
+# En prod el tráfico va por Private Endpoint y este recurso no se crea.
+resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_azure_services" {
+  count     = var.enable_private_endpoint ? 0 : 1
+  name      = "allow-azure-services"
+  server_id = azurerm_postgresql_flexible_server.psql.id
+  # 0.0.0.0/0.0.0.0 es el rango especial de Azure que habilita "Allow access from Azure services"
+  start_ip_address = "0.0.0.0"
+  end_ip_address   = "0.0.0.0"
+}
+
 # Private Endpoint
 resource "azurerm_private_endpoint" "psql" {
   count               = var.enable_private_endpoint ? 1 : 0

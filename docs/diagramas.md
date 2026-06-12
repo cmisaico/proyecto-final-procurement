@@ -22,7 +22,7 @@ graph TB
 
     subgraph AzureCloud["☁️ Azure Cloud — brazilsouth"]
         ACR["📦 ACR Basic\nacrprocurementdev"]
-        KV["🔑 Key Vault\nkv-procurement-az-dev"]
+        KV["🔑 Key Vault\nkv-procurement-azab-dev"]
 
         subgraph AKS["🚀 AKS Cluster — aks-procurement-dev (Free tier)"]
             subgraph SystemPool["System Pool (DS2_v2 x1-3)"]

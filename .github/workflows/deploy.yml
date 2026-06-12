@@ -265,6 +265,7 @@ jobs:
         # Apply Rollout + stable/canary Services (not managed by the Helm chart).
         # Must run after the Helm chart so the ConfigMap and Secret exist first.
         kubectl apply -f k8s/manifests/api-gateway-rollout.yaml
+        kubectl apply -f k8s/ingress/ingress-routes.yaml
 
     - name: Deploy API Gateway (Canary)
       run: |

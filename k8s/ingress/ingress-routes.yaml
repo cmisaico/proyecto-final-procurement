@@ -32,12 +32,12 @@ spec:
   - host: procurement.local
     http:
       paths:
-      # API Gateway — rutas de la plataforma
+      # API Gateway — rutas de la plataforma (stable service del Argo Rollout)
       - path: /api
         pathType: Prefix
         backend:
           service:
-            name: api-gateway
+            name: api-gateway-stable
             port:
               number: 8000
       # Health / readiness sin rate limiting
@@ -45,7 +45,7 @@ spec:
         pathType: Exact
         backend:
           service:
-            name: api-gateway
+            name: api-gateway-stable
             port:
               number: 8000
       # FastAPI docs — deben ir antes del catch-all del frontend
@@ -53,21 +53,21 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: api-gateway
+            name: api-gateway-stable
             port:
               number: 8000
       - path: /redoc
         pathType: Prefix
         backend:
           service:
-            name: api-gateway
+            name: api-gateway-stable
             port:
               number: 8000
       - path: /openapi.json
         pathType: Exact
         backend:
           service:
-            name: api-gateway
+            name: api-gateway-stable
             port:
               number: 8000
       # Frontend — catch-all para la SPA (debe ser el último path)
@@ -127,13 +127,13 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: api-gateway
+            name: api-gateway-stable
             port:
               number: 8000
       - path: /api/v1/agents
         pathType: Prefix
         backend:
           service:
-            name: api-gateway
+            name: api-gateway-stable
             port:
               number: 8000
