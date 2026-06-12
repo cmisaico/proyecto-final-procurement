@@ -282,9 +282,17 @@ jobs:
         echo "Testing against: http://procurement.local ($INGRESS_IP)"
         echo "$INGRESS_IP  procurement.local" | sudo tee -a /etc/hosts
 
-        HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://procurement.local/api/v1/health)
+        # Reintentos para dar tiempo a NGINX de recargar config tras kubectl apply
+        for i in $(seq 1 10); do
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://procurement.local/api/v1/health)
+          if [ "$HTTP_STATUS" = "200" ]; then
+            break
+          fi
+          echo "Attempt $i: health check returned $HTTP_STATUS, retrying in 10s..."
+          sleep 10
+        done
         if [ "$HTTP_STATUS" != "200" ]; then
-          echo "Health check failed: $HTTP_STATUS"
+          echo "Health check failed after retries: $HTTP_STATUS"
           kubectl argo rollouts abort api-gateway -n $NAMESPACE
           exit 1
         fi
